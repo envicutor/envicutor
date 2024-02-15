@@ -3,9 +3,15 @@ cmd_opts
   - test_cases
   - dependencies, compile and run limits
 */
-- bool run_this_stage(stage, args, stage_limits, stdin)
+- bool run_this_stage(stage, arg, stage_limits, stdin)
     - bool success = true
-    - cmd = cmd("nsjail").args(with_stage_limits).arg("--").arg("nix-shell").args(args)
+    - nix_bin_path = get_output('readlink -f /root/.nix-profile/bin/')
+    - cmd = cmd("nsjail")
+      .args(with_stage_limits)
+      .arg("--")
+      .arg(path.join(nix_bin_path, "nix-shell"))
+      .arg("--run")
+      .arg(arg)
     - cp = cmd.spawn()
     - if stdin is not equal null
       - cp.stdin(stdin)
@@ -21,12 +27,11 @@ cmd_opts
   - dependencies_limits = json.parse(cmd_opts("dependencies_limits"))
   - compile_limits = json.parse(cmd_opts("compile_limits"))
   - run_limits = json.parse(cmd_opts("run_limits"))
-  - if (!run_this_stage("dependencies",["sleep", "0"], dependencies_limits, null))
+  - if (!run_this_stage("dependencies", "sleep 0", dependencies_limits, null))
     - exit
-  - if file_exists("cutor-compile.sh") && !run_this_stage("compile", ["./cutor-compile.sh"], compile_limits, null)
+  - if file_exists("cutor-compile.sh") && !run_this_stage("compile", "./cutor-compile.sh", compile_limits, null)
     - exit
   - test_cases = json.parse(cmd_opts("test_cases"))
   - for test_case in test_cases
-    - args = ["./cutor-run.sh", ...test_case.args.split(' ')]
-    - if !run_this_stage("run", args, run_limits, test_case.stdin)
+    - if !run_this_stage("run", "./cutor-run.sh " + test_case.args, run_limits, test_case.stdin)
       - exit
