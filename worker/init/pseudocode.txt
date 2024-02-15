@@ -1,0 +1,28 @@
+/*
+cmd_opts
+  - test_cases
+  - dependencies, compile and run limits
+*/
+- bool run_this_stage(stage, command, stage_limits)
+    - bool success = true
+    - cp = create_child_process("nsjail with_stage_limits nix-shell " + command)
+    - cp.on_output((output) => print(json.stringify({ stage, type: "output", value: output })))
+    - cp.on_error((error) => print(json.stringify({ stage, type: "error", value: error })))
+    - cp.on_exit((code, signal) => {
+      print(json.stringify({ stage, type: "exit", value: { code, signal } }))
+      success = (code == 0)
+    })
+    - return success
+
+- main()
+  - dependencies_limits = json.parse(cmd_opts("dependencies_limits"))
+  - compile_limits = json.parse(cmd_opts("compile_limits"))
+  - run_limits = json.parse(cmd_opts("run_limits"))
+  - if (!run_this_stage("dependencies", "sleep 0", dependencies_limits))
+    - exit
+  - if file_exists("cutor-compile.sh") && !run_this_stage("compile", "./cutor-compile.sh", compile_limits)
+    - exit
+  - test_cases = json.parse(cmd_opts("test_cases"))
+  - for test_case in test_cases
+    - if !run_this_stage("run", "./cutor-run.sh ${test_case.args.split(' ')}", run_limits)
+      - exit
