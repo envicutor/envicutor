@@ -177,7 +177,7 @@ async fn run_this_stage(
         stderr,
         time: 0,
         code: exit_status.code().unwrap(),
-        signal: signals[exit_status.signal().unwrap() as usize],
+        signal: signals[exit_status.signal().unwrap() as usize].to_string(),
     };
 
     return Ok(true);
