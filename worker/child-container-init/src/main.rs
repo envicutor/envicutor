@@ -1,6 +1,13 @@
-use std::io::Error;
+use std::{
+    env,
+    io::Error,
+    process::Stdio,
+};
 
-use tokio::process::Command;
+use tokio::{
+    io::AsyncWriteExt,
+    process::Command,
+};
 
 struct StageConstraints {
     time: u32,
@@ -17,6 +24,7 @@ async fn run_this_stage(
     stage: &str,
     main_program: &str,
     args: &[&str],
+    stdin: Option<&str>,
     constraints: StageConstraints,
 ) -> Result<bool, Error> {
     let mut success = true;
@@ -43,12 +51,28 @@ async fn run_this_stage(
     if constraints.networking {
         cmd.arg("-N").arg("-R").arg("/etc/resolv.conf");
     }
-    cmd.arg("--")
+    let mut cp = cmd
+        .arg("--")
         .arg("/bin/bash")
-        .arg("-c");
+        .arg("-c")
+        .arg(format!(
+            "export PATH=/bin:$PATH && mkdir /tmp/home && {}/nix-shell shell.nix --run {}",
+            nix_bin_path, main_program
+        ))
+        .arg("envicutor")
+        .args(args)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .stdin(Stdio::piped())
+        .spawn()?;
+    if let Some(s) = stdin {
+        let mut handle = cp.stdin.take().unwrap();
+        handle.write_all(s.as_bytes()).await?;
+    }
     return Ok(true);
 }
 
 fn main() {
-    println!("Hello, world!");
+    let args: Vec<_> = env::args().collect();
+    let r: Vec<u32> = serde_json::from_str(&args[1]).unwrap();
 }
