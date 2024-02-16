@@ -1,23 +1,22 @@
-use std::{
-    env,
-    io::Error,
-    process::Stdio,
-};
+use std::{env, io::Error, process::Stdio};
 
-use tokio::{
-    io::AsyncWriteExt,
-    process::Command,
-};
+use tokio::{io::{AsyncWriteExt, AsyncReadExt, BufReader}, process::Command};
 
 struct StageConstraints {
     time: u32,
     memory: u32,
     no_processes: u32,
-    output_size: u32,
-    error_size: u32,
+    output_size: u64,
+    error_size: u64,
     file_size: u32,
     networking: bool,
     no_files: u32,
+}
+
+struct StageResult {
+    stage: String,
+    r#type: String,
+    value: String,
 }
 
 async fn run_this_stage(
@@ -69,6 +68,25 @@ async fn run_this_stage(
         let mut handle = cp.stdin.take().unwrap();
         handle.write_all(s.as_bytes()).await?;
     }
+
+    let stdout_reader = BufReader::new(cp.stdout.take().unwrap());
+    let stderr_reader = BufReader::new(cp.stderr.take().unwrap());
+
+    cp.wait().await?;
+
+    let mut stdout = Vec::new();
+    let mut stderr = Vec::new();
+    stdout_reader
+        .take(constraints.output_size)
+        .read_to_end(&mut stdout)
+        .await?;
+    stderr_reader
+        .take(constraints.error_size)
+        .read_to_end(&mut stderr)
+        .await?;
+    let stdout = String::from_utf8_lossy(&stdout).into_owned();
+    let stderr = String::from_utf8_lossy(&stderr).into_owned();
+
     return Ok(true);
 }
 
