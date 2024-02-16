@@ -1,6 +1,9 @@
-use std::{env, io::Error, process::Stdio};
+use std::{env, io::Error, os::unix::process::ExitStatusExt, process::Stdio};
 
-use tokio::{io::{AsyncWriteExt, AsyncReadExt, BufReader}, process::Command};
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt, BufReader},
+    process::Command,
+};
 
 struct StageConstraints {
     time: u32,
@@ -13,11 +16,82 @@ struct StageConstraints {
     no_files: u32,
 }
 
-struct StageResult {
-    stage: String,
-    r#type: String,
-    value: String,
+const signals: [&str; 64] = [
+    "SIGHUP",
+    "SIGINT",
+    "SIGQUIT",
+    "SIGILL",
+    "SIGTRAP",
+    "SIGABRT",
+    "SIGBUS",
+    "SIGFPE",
+    "SIGKILL",
+    "SIGUSR1",
+    "SIGSEGV",
+    "SIGUSR2",
+    "SIGPIPE",
+    "SIGALRM",
+    "SIGTERM",
+    "SIGSTKFLT",
+    "SIGCHLD",
+    "SIGCONT",
+    "SIGSTOP",
+    "SIGTSTP",
+    "SIGTTIN",
+    "SIGTTOU",
+    "SIGURG",
+    "SIGXCPU",
+    "SIGXFSZ",
+    "SIGVTALRM",
+    "SIGPROF",
+    "SIGWINCH",
+    "SIGIO",
+    "SIGPWR",
+    "",
+    "",
+    "SIGSYS",
+    "SIGRTMIN",
+    "SIGRTMIN+1",
+    "SIGRTMIN+2",
+    "SIGRTMIN+3",
+    "SIGRTMIN+4",
+    "SIGRTMIN+5",
+    "SIGRTMIN+6",
+    "SIGRTMIN+7",
+    "SIGRTMIN+8",
+    "SIGRTMIN+9",
+    "SIGRTMIN+10",
+    "SIGRTMIN+11",
+    "SIGRTMIN+12",
+    "SIGRTMIN+13",
+    "SIGRTMIN+14",
+    "SIGRTMIN+15",
+    "SIGRTMAX-14",
+    "SIGRTMAX-13",
+    "SIGRTMAX-12",
+    "SIGRTMAX-11",
+    "SIGRTMAX-10",
+    "SIGRTMAX-9",
+    "SIGRTMAX-8",
+    "SIGRTMAX-7",
+    "SIGRTMAX-6",
+    "SIGRTMAX-5",
+    "SIGRTMAX-4",
+    "SIGRTMAX-3",
+    "SIGRTMAX-2",
+    "SIGRTMAX-1",
+    "SIGRTMAX"];
+struct StageOutput{
+    stdout: Stri,
+
+    stderr: Stri,
+
+    time: u32,
+    code: i32,
+    signal: String,
 }
+
+
 
 async fn run_this_stage(
     stage: &str,
@@ -46,7 +120,19 @@ async fn run_this_stage(
         .arg("--rlimit_nofile")
         .arg(constraints.no_files.to_string())
         .arg("--rlimit_fsize")
-        .arg(constraints.file_size.to_string()); // to mb
+        .arg(constraints.file_size.to_string()) // to mb
+        .arg("-B")
+        .arg("/app")
+        .arg("--cwd")
+        .arg("/app")
+        .arg("-B")
+        .arg("/tmp")
+        .arg("-R")
+        .arg("/nix")
+        .arg("-R")
+        .arg("/bin")
+        .arg("-R")
+        .arg("/lib:/lib");
     if constraints.networking {
         cmd.arg("-N").arg("-R").arg("/etc/resolv.conf");
     }
@@ -72,7 +158,7 @@ async fn run_this_stage(
     let stdout_reader = BufReader::new(cp.stdout.take().unwrap());
     let stderr_reader = BufReader::new(cp.stderr.take().unwrap());
 
-    cp.wait().await?;
+    let exit_status =cp.wait().await?;
 
     let mut stdout = Vec::new();
     let mut stderr = Vec::new();
@@ -86,6 +172,14 @@ async fn run_this_stage(
         .await?;
     let stdout = String::from_utf8_lossy(&stdout).into_owned();
     let stderr = String::from_utf8_lossy(&stderr).into_owned();
+
+    let stage_output = StageOutput {
+        stdout,
+        stderr,
+        time: 0,
+        code: exit_status.code().unwrap(),
+        signal: exit_status.signal().unwrap(),
+    };
 
     return Ok(true);
 }

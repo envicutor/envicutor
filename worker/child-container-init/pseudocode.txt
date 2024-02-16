@@ -17,10 +17,10 @@ cmd_opts
     - cp = cmd.spawn()
     - if stdin is not equal null
       - cp.stdin(stdin)
-    - cp.on_output((output) => print(json.stringify({ stage, type: "output", value: output })))
-    - cp.on_error((error) => print(json.stringify({ stage, type: "error", value: error })))
+    - cp.on_output((output) => print(json.stringify({ stage, value: output })))
+    - cp.on_error((error) => print(json.stringify({ stage, value: error })))
     - cp.on_exit((code, signal) => {
-      print(json.stringify({ stage, type: "exit", value: { code, signal } }))
+      print(json.stringify({ stage, value: { code, signal } }))
       success = (code == 0)
     })
     - return success
