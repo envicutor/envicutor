@@ -80,18 +80,17 @@ const signals: [&str; 64] = [
     "SIGRTMAX-3",
     "SIGRTMAX-2",
     "SIGRTMAX-1",
-    "SIGRTMAX"];
-struct StageOutput{
-    stdout: Stri,
+    "SIGRTMAX",
+];
+struct StageOutput {
+    stdout: String,
 
-    stderr: Stri,
+    stderr: String,
 
     time: u32,
     code: i32,
     signal: String,
 }
-
-
 
 async fn run_this_stage(
     stage: &str,
@@ -158,7 +157,7 @@ async fn run_this_stage(
     let stdout_reader = BufReader::new(cp.stdout.take().unwrap());
     let stderr_reader = BufReader::new(cp.stderr.take().unwrap());
 
-    let exit_status =cp.wait().await?;
+    let exit_status = cp.wait().await?;
 
     let mut stdout = Vec::new();
     let mut stderr = Vec::new();
@@ -178,7 +177,7 @@ async fn run_this_stage(
         stderr,
         time: 0,
         code: exit_status.code().unwrap(),
-        signal: exit_status.signal().unwrap(),
+        signal: signals[exit_status.signal().unwrap() as usize],
     };
 
     return Ok(true);
