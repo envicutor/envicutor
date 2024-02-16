@@ -1,2 +1,0 @@
-- Added file descriptors to limits
-- Added networking to limits
