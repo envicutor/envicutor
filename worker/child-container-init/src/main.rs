@@ -159,7 +159,7 @@ async fn run_this_stage(
         .arg("/bin/bash")
         .arg("-c")
         .arg(format!(
-            "export PATH=/bin:$PATH && mkdir /tmp/home && {}/nix-shell shell.nix --run {}",
+            "export PATH=/bin:$PATH && mkdir -p /tmp/home && {}/nix-shell shell.nix --run {}",
             nix_bin_path, main_program
         ))
         .arg("envicutor")
@@ -219,7 +219,7 @@ async fn main() {
 
     if !run_this_stage(
         "dependencies",
-        "sleep 0",
+        "'sleep 0'",
         &[],
         None,
         stage_constraints.clone(),
