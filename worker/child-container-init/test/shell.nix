@@ -3,7 +3,5 @@ let
 in pkgs.mkShell {
   nativeBuildInputs = with pkgs; [
     python3
-    rustc
-    cargo
   ];
 }

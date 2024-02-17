@@ -116,7 +116,7 @@ async fn run_this_stage(
         .await?;
     let mut nix_bin_path = String::from_utf8_lossy(&nix_bin_path_output.stdout).into_owned();
     nix_bin_path = nix_bin_path.trim().to_string();
-    println!("{}", nix_bin_path);
+
     let mut cmd = Command::new("nsjail");
     cmd.arg("-t")
         .arg(constraints.time.to_string())
@@ -128,7 +128,6 @@ async fn run_this_stage(
         .arg("--disable_clone_newipc")
         .arg("--disable_clone_newuts")
         .arg("--disable_clone_newcgroup")
-        .arg("--really_quiet")
         .arg("--cgroup_mem_max")
         .arg((constraints.memory * 1000 * 1000).to_string()) // to bytes
         .arg("--cgroup_pids_max")
@@ -140,9 +139,9 @@ async fn run_this_stage(
         .arg("--rlimit_fsize")
         .arg(constraints.file_size.to_string()) // to mb
         .arg("-B")
-        .arg("/app")
+        .arg("/submission")
         .arg("--cwd")
-        .arg("/app")
+        .arg("/submission")
         .arg("-B")
         .arg("/tmp")
         .arg("-R")
@@ -150,10 +149,14 @@ async fn run_this_stage(
         .arg("-R")
         .arg("/bin")
         .arg("-R")
-        .arg("/lib:/lib");
+        .arg("/lib:/lib")
+        .arg("-E")
+        .arg("HOME=/tmp/home");
+
     if constraints.networking {
         cmd.arg("-N").arg("-R").arg("/etc/resolv.conf");
     }
+
     let mut cp = cmd
         .arg("--")
         .arg("/bin/bash")
@@ -168,6 +171,7 @@ async fn run_this_stage(
         .stderr(Stdio::piped())
         .stdin(Stdio::piped())
         .spawn()?;
+
     if let Some(s) = stdin {
         let mut handle = cp.stdin.take().unwrap();
         handle.write_all(s.as_bytes()).await?;
@@ -188,6 +192,7 @@ async fn run_this_stage(
         .take(constraints.error_size)
         .read_to_end(&mut stderr)
         .await?;
+
     let stdout = String::from_utf8_lossy(&stdout).into_owned();
     let stderr = String::from_utf8_lossy(&stderr).into_owned();
 
@@ -202,12 +207,13 @@ async fn run_this_stage(
 
     println!("{}", serde_json::to_string(&stage_output)?);
 
-    return Ok(exit_status.code().unwrap() == 0);
+    Ok(exit_status.code().unwrap() == 0)
 }
+
 #[tokio::main]
 async fn main() {
     let stage_constraints = StageConstraints {
-        time: 10,
+        time: 10000,
         memory: 100000,
         no_processes: 100,
         output_size: 100000,
