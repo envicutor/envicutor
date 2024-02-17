@@ -15,7 +15,7 @@ use tokio::{
 #[derive(Clone)]
 struct StageConstraints {
     time: u32,
-    memory: u32,
+    memory: u64,
     no_processes: u32,
     output_size: u64,
     error_size: u64,
@@ -114,11 +114,21 @@ async fn run_this_stage(
         .arg("/root/.nix-profile/bin/")
         .output()
         .await?;
-    let nix_bin_path = String::from_utf8_lossy(&nix_bin_path_output.stdout).into_owned();
+    let mut nix_bin_path = String::from_utf8_lossy(&nix_bin_path_output.stdout).into_owned();
+    nix_bin_path = nix_bin_path.trim().to_string();
+    println!("{}", nix_bin_path);
     let mut cmd = Command::new("nsjail");
     cmd.arg("-t")
         .arg(constraints.time.to_string())
         .arg("--use_cgroupv2")
+        .arg("--disable_clone_newuser")
+        .arg("--disable_proc")
+        .arg("--disable_clone_newns")
+        .arg("--disable_clone_newpid")
+        .arg("--disable_clone_newipc")
+        .arg("--disable_clone_newuts")
+        .arg("--disable_clone_newcgroup")
+        .arg("--really_quiet")
         .arg("--cgroup_mem_max")
         .arg((constraints.memory * 1000 * 1000).to_string()) // to bytes
         .arg("--cgroup_pids_max")
@@ -187,7 +197,7 @@ async fn run_this_stage(
         stderr,
         time: 0,
         code: exit_status.code().unwrap(),
-        signal: translate_signal(exit_status.signal().unwrap()).to_string(),
+        signal: translate_signal(exit_status.signal().unwrap_or(-1)).to_string(),
     };
 
     println!("{}", serde_json::to_string(&stage_output)?);
