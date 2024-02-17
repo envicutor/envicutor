@@ -1,10 +1,18 @@
-use std::{env, io::Error, os::unix::process::ExitStatusExt, process::Stdio};
+use std::{
+    io::Error,
+    os::unix::process::ExitStatusExt,
+    process::{exit, Stdio},
+};
+
+use serde::{Deserialize, Serialize};
 
 use tokio::{
+    fs,
     io::{AsyncReadExt, AsyncWriteExt, BufReader},
     process::Command,
 };
 
+#[derive(Clone)]
 struct StageConstraints {
     time: u32,
     memory: u32,
@@ -16,80 +24,82 @@ struct StageConstraints {
     no_files: u32,
 }
 
-const signals: [&str; 64] = [
-    "SIGHUP",
-    "SIGINT",
-    "SIGQUIT",
-    "SIGILL",
-    "SIGTRAP",
-    "SIGABRT",
-    "SIGBUS",
-    "SIGFPE",
-    "SIGKILL",
-    "SIGUSR1",
-    "SIGSEGV",
-    "SIGUSR2",
-    "SIGPIPE",
-    "SIGALRM",
-    "SIGTERM",
-    "SIGSTKFLT",
-    "SIGCHLD",
-    "SIGCONT",
-    "SIGSTOP",
-    "SIGTSTP",
-    "SIGTTIN",
-    "SIGTTOU",
-    "SIGURG",
-    "SIGXCPU",
-    "SIGXFSZ",
-    "SIGVTALRM",
-    "SIGPROF",
-    "SIGWINCH",
-    "SIGIO",
-    "SIGPWR",
-    "",
-    "",
-    "SIGSYS",
-    "SIGRTMIN",
-    "SIGRTMIN+1",
-    "SIGRTMIN+2",
-    "SIGRTMIN+3",
-    "SIGRTMIN+4",
-    "SIGRTMIN+5",
-    "SIGRTMIN+6",
-    "SIGRTMIN+7",
-    "SIGRTMIN+8",
-    "SIGRTMIN+9",
-    "SIGRTMIN+10",
-    "SIGRTMIN+11",
-    "SIGRTMIN+12",
-    "SIGRTMIN+13",
-    "SIGRTMIN+14",
-    "SIGRTMIN+15",
-    "SIGRTMAX-14",
-    "SIGRTMAX-13",
-    "SIGRTMAX-12",
-    "SIGRTMAX-11",
-    "SIGRTMAX-10",
-    "SIGRTMAX-9",
-    "SIGRTMAX-8",
-    "SIGRTMAX-7",
-    "SIGRTMAX-6",
-    "SIGRTMAX-5",
-    "SIGRTMAX-4",
-    "SIGRTMAX-3",
-    "SIGRTMAX-2",
-    "SIGRTMAX-1",
-    "SIGRTMAX",
-];
+#[derive(Serialize, Deserialize)]
 struct StageOutput {
+    stage: String,
     stdout: String,
-
     stderr: String,
-
     time: u32,
     code: i32,
     signal: String,
+}
+
+fn translate_signal(signal: i32) -> String {
+    match signal {
+        1 => "SIGHUP".to_string(),
+        2 => "SIGINT".to_string(),
+        3 => "SIGQUIT".to_string(),
+        4 => "SIGILL".to_string(),
+        5 => "SIGTRAP".to_string(),
+        6 => "SIGABRT".to_string(),
+        7 => "SIGBUS".to_string(),
+        8 => "SIGFPE".to_string(),
+        9 => "SIGKILL".to_string(),
+        10 => "SIGUSR1".to_string(),
+        11 => "SIGSEGV".to_string(),
+        12 => "SIGUSR2".to_string(),
+        13 => "SIGPIPE".to_string(),
+        14 => "SIGALRM".to_string(),
+        15 => "SIGTERM".to_string(),
+        16 => "SIGSTKFLT".to_string(),
+        17 => "SIGCHLD".to_string(),
+        18 => "SIGCONT".to_string(),
+        19 => "SIGSTOP".to_string(),
+        20 => "SIGTSTP".to_string(),
+        21 => "SIGTTIN".to_string(),
+        22 => "SIGTTOU".to_string(),
+        23 => "SIGURG".to_string(),
+        24 => "SIGXCPU".to_string(),
+        25 => "SIGXFSZ".to_string(),
+        26 => "SIGVTALRM".to_string(),
+        27 => "SIGPROF".to_string(),
+        28 => "SIGWINCH".to_string(),
+        29 => "SIGIO".to_string(),
+        30 => "SIGPWR".to_string(),
+        31 => "SIGSYS".to_string(),
+        34 => "SIGRTMIN".to_string(),
+        35 => "SIGRTMIN+1".to_string(),
+        36 => "SIGRTMIN+2".to_string(),
+        37 => "SIGRTMIN+3".to_string(),
+        38 => "SIGRTMIN+4".to_string(),
+        39 => "SIGRTMIN+5".to_string(),
+        40 => "SIGRTMIN+6".to_string(),
+        41 => "SIGRTMIN+7".to_string(),
+        42 => "SIGRTMIN+8".to_string(),
+        43 => "SIGRTMIN+9".to_string(),
+        44 => "SIGRTMIN+10".to_string(),
+        45 => "SIGRTMIN+11".to_string(),
+        46 => "SIGRTMIN+12".to_string(),
+        47 => "SIGRTMIN+13".to_string(),
+        48 => "SIGRTMIN+14".to_string(),
+        49 => "SIGRTMIN+15".to_string(),
+        50 => "SIGRTMAX-14".to_string(),
+        51 => "SIGRTMAX-13".to_string(),
+        52 => "SIGRTMAX-12".to_string(),
+        53 => "SIGRTMAX-11".to_string(),
+        54 => "SIGRTMAX-10".to_string(),
+        55 => "SIGRTMAX-9".to_string(),
+        56 => "SIGRTMAX-8".to_string(),
+        57 => "SIGRTMAX-7".to_string(),
+        58 => "SIGRTMAX-6".to_string(),
+        59 => "SIGRTMAX-5".to_string(),
+        60 => "SIGRTMAX-4".to_string(),
+        61 => "SIGRTMAX-3".to_string(),
+        62 => "SIGRTMAX-2".to_string(),
+        63 => "SIGRTMAX-1".to_string(),
+        64 => "SIGRTMAX".to_string(),
+        _ => "Unknown".to_string(),
+    }
 }
 
 async fn run_this_stage(
@@ -99,7 +109,6 @@ async fn run_this_stage(
     stdin: Option<&str>,
     constraints: StageConstraints,
 ) -> Result<bool, Error> {
-    let mut success = true;
     let nix_bin_path_output = Command::new("readlink")
         .arg("-f")
         .arg("/root/.nix-profile/bin/")
@@ -173,17 +182,68 @@ async fn run_this_stage(
     let stderr = String::from_utf8_lossy(&stderr).into_owned();
 
     let stage_output = StageOutput {
+        stage: stage.to_string(),
         stdout,
         stderr,
         time: 0,
         code: exit_status.code().unwrap(),
-        signal: signals[exit_status.signal().unwrap() as usize].to_string(),
+        signal: translate_signal(exit_status.signal().unwrap()).to_string(),
     };
 
-    return Ok(true);
-}
+    println!("{}", serde_json::to_string(&stage_output)?);
 
-fn main() {
-    let args: Vec<_> = env::args().collect();
-    let r: Vec<u32> = serde_json::from_str(&args[1]).unwrap();
+    return Ok(exit_status.code().unwrap() == 0);
+}
+#[tokio::main]
+async fn main() {
+    let stage_constraints = StageConstraints {
+        time: 10,
+        memory: 100000,
+        no_processes: 100,
+        output_size: 100000,
+        error_size: 100000,
+        file_size: 100000,
+        networking: true,
+        no_files: 100,
+    };
+
+    if !run_this_stage(
+        "dependencies",
+        "sleep 0",
+        &[],
+        None,
+        stage_constraints.clone(),
+    )
+    .await
+    .unwrap()
+    {
+        exit(1);
+    }
+
+    if fs::try_exists("cutor-compile.sh").await.unwrap()
+        && !run_this_stage(
+            "compile",
+            "./cutor-compile.sh",
+            &[],
+            None,
+            stage_constraints.clone(),
+        )
+        .await
+        .unwrap()
+    {
+        exit(1);
+    }
+
+    if !run_this_stage(
+        "run",
+        "./cutor-run.sh",
+        &[],
+        Some("hello world"),
+        stage_constraints.clone(),
+    )
+    .await
+    .unwrap()
+    {
+        exit(1);
+    }
 }
