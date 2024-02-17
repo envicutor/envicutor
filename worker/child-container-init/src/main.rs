@@ -151,7 +151,7 @@ async fn run_this_stage(
         .arg("-R")
         .arg("/lib:/lib")
         .arg("-E")
-        .arg("HOME=/tmp/home");
+        .arg("PATH=/bin");
 
     if constraints.networking {
         cmd.arg("-N").arg("-R").arg("/etc/resolv.conf");
@@ -162,7 +162,7 @@ async fn run_this_stage(
         .arg("/bin/bash")
         .arg("-c")
         .arg(format!(
-            "export PATH=/bin:$PATH && mkdir -p /tmp/home && {}/nix-shell shell.nix --run {}",
+            "{}/nix-shell shell.nix --run {}",
             nix_bin_path, main_program
         ))
         .arg("envicutor")
