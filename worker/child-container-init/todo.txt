@@ -1,3 +1,11 @@
+
+
+- More versatile Docker cache
+- Just use Docker for overlaying FS, use nsjail for isolation
+  - Run Docker with privileged
+  - Run the container as non-root user, run nsjail as root user via setuid?
+  - Map to someone else inside nsjail
+    - What does that even do?
 - Ditch nix daemon in child container?
 	- We need non-root user for more security?
 		- Can I install Nix with another user in the Docker file?
@@ -25,6 +33,7 @@
 - Notify about limits violated
 - How to let the child Docker container see the cache server?
 	- Separate network and pass this network to the child?
+    - How to pass network to nsjail? (CLONE MACVLAN?)
 - Add file descriptors to limits (docs)
 - Add networking to limits (docs)
 

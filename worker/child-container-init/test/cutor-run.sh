@@ -1,1 +1,1 @@
-python3 main.py
+ls /

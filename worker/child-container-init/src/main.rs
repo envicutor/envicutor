@@ -121,13 +121,6 @@ async fn run_this_stage(
     cmd.arg("-t")
         .arg(constraints.time.to_string())
         .arg("--use_cgroupv2")
-        .arg("--disable_clone_newuser")
-        .arg("--disable_proc")
-        .arg("--disable_clone_newns")
-        .arg("--disable_clone_newpid")
-        .arg("--disable_clone_newipc")
-        .arg("--disable_clone_newuts")
-        .arg("--disable_clone_newcgroup")
         .arg("--cgroup_mem_max")
         .arg((constraints.memory * 1000 * 1000).to_string()) // to bytes
         .arg("--cgroup_pids_max")
@@ -144,12 +137,24 @@ async fn run_this_stage(
         .arg("/submission")
         .arg("-B")
         .arg("/tmp")
-        .arg("-R")
+        .arg("-B")
         .arg("/nix")
         .arg("-R")
         .arg("/bin")
         .arg("-R")
-        .arg("/lib:/lib")
+        .arg("/lib")
+        .arg("-R")
+        .arg("/usr/lib")
+        .arg("-R")
+        .arg("/dev/null")
+        .arg("-R")
+        .arg("/dev/urandom")
+        .arg("--user")
+        .arg("99999")
+        .arg("--group")
+        .arg("99999")
+        .arg("-E")
+        .arg("HOME=/tmp")
         .arg("-E")
         .arg("PATH=/bin");
 
@@ -159,13 +164,10 @@ async fn run_this_stage(
 
     let mut cp = cmd
         .arg("--")
-        .arg("/bin/bash")
-        .arg("-c")
-        .arg(format!(
-            "{}/nix-shell shell.nix --run {}",
-            nix_bin_path, main_program
-        ))
-        .arg("envicutor")
+        .arg(format!("{}/nix-shell", nix_bin_path))
+        .arg("shell.nix")
+        .arg("--run")
+        .arg(main_program)
         .args(args)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -225,7 +227,7 @@ async fn main() {
 
     if !run_this_stage(
         "dependencies",
-        "'sleep 0'",
+        "sleep 0",
         &[],
         None,
         stage_constraints.clone(),

@@ -3,3 +3,6 @@ services:
     build: .
     volumes:
       - ./test:/submission
+    privileged: true
+    runtime: runc
+    cgroup: host
