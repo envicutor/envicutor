@@ -10,10 +10,10 @@ RUN cargo build --release
 
 FROM alpine:3.19.1
 
-RUN apk update && apk add xz curl bash shadow && apk add --repository=http://dl-cdn.alpinelinux.org/alpine/edge/testing/ nsjail
+RUN apk update && apk add xz curl bash && apk add --repository=http://dl-cdn.alpinelinux.org/alpine/edge/testing/ nsjail
 
 # install nix
-RUN /bin/bash -c "sh <(curl -L https://nixos.org/nix/install) --daemon --yes" && /root/.nix-profile/bin/nix-shell --packages gcc || exit 1
+RUN /bin/bash -c "sh <(curl -L https://nixos.org/nix/install) --daemon --yes" || exit 1
 
 WORKDIR /app
 COPY --from=build /app/target/release/child-container-init /app

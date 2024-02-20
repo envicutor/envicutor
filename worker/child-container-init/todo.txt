@@ -1,18 +1,16 @@
+- Nix store on worker and clean up each time vs nix store in overlay?
+  - Use Nix store in overlay for isolation
+    - Submissions can communicate with each other if we have a shared nix store
+  - How to isolate network in nsjail while still having internet access?
+    - Clone appropriate macvlan
 
-
-- More versatile Docker cache
 - Just use Docker for overlaying FS, use nsjail for isolation
   - Run Docker with privileged
   - Run the container as non-root user, run nsjail as root user via setuid?
-  - Map to someone else inside nsjail
-    - What does that even do?
-- Ditch nix daemon in child container?
-	- We need non-root user for more security?
-		- Can I install Nix with another user in the Docker file?
-      - Yes
-    - Problem is that cgroups don't work
-  - Why do I need to be a non-root user?
-  - cgroups with root user vs rlimits with non-root user
+    - Install nix for another user
+    - In nsjail map to the user who has nix installed
+
+- More versatile Docker cache
 - Report resource consumption
 	- Because we are wrapping inside of nsjail, we can't get the exit signal properly
     - Use time to get the exit signal?
@@ -20,9 +18,6 @@
 	- nsjail really_quiet
 - Explain Some(), unwrap(), take()
 - Fix to_string
-- /tmp/home should only be created once
-  - Or just use a home directory
-    - We now have one user
 - str, String optimizations
 - Remove unwraps
   - Handle no exit signal
@@ -31,11 +26,5 @@
 - Credit Sandkasten
 - Mount more stuff
 - Notify about limits violated
-- How to let the child Docker container see the cache server?
-	- Separate network and pass this network to the child?
-    - How to pass network to nsjail? (CLONE MACVLAN?)
 - Add file descriptors to limits (docs)
 - Add networking to limits (docs)
-
-- Consider removing nsjail disabilities with sysbox inside of sysbox
-	- Can't
