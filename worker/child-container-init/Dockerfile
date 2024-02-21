@@ -13,9 +13,9 @@ FROM alpine:3.19.1
 RUN apk update && apk add xz curl bash shadow && apk add --repository=http://dl-cdn.alpinelinux.org/alpine/edge/testing/ nsjail
 
 # install nix
-RUN /bin/bash -c "sh <(curl -L https://nixos.org/nix/install) --daemon --yes"\
-    && useradd -m envicutor\
-    && chmod u+s /usr/bin/nsjail || exit 1
+RUN useradd -m envicutor && install -d -m755 -o envicutor -g envicutor /nix && chmod u+s /usr/bin/nsjail
+USER envicutor
+RUN /bin/bash -c "curl -L https://nixos.org/nix/install | sh" || exit 1
 
 USER envicutor
 

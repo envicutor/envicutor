@@ -111,7 +111,7 @@ async fn run_this_stage(
 ) -> Result<bool, Error> {
     let nix_bin_path_output = Command::new("readlink")
         .arg("-f")
-        .arg("/root/.nix-profile/bin/")
+        .arg("/home/envicutor/.nix-profile/bin/")
         .output()
         .await?;
     let mut nix_bin_path = String::from_utf8_lossy(&nix_bin_path_output.stdout).into_owned();
@@ -139,6 +139,8 @@ async fn run_this_stage(
         .arg("/tmp")
         .arg("-B")
         .arg("/nix")
+        .arg("-B")
+        .arg("/home/envicutor")
         .arg("-R")
         .arg("/bin")
         .arg("-R")
@@ -150,11 +152,11 @@ async fn run_this_stage(
         .arg("-R")
         .arg("/dev/urandom")
         .arg("--user")
-        .arg("99999")
+        .arg("envicutor:envicutor")
         .arg("--group")
-        .arg("99999")
+        .arg("envicutor:envicutor")
         .arg("-E")
-        .arg("HOME=/tmp")
+        .arg("HOME=/home/envicutor")
         .arg("-E")
         .arg("PATH=/bin");
 
