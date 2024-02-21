@@ -2,7 +2,7 @@
   - Use Nix store in overlay for isolation
     - Submissions can communicate with each other if we have a shared nix store
   - How to isolate network in nsjail while still having internet access?
-    - Clone appropriate macvlan
+    - Clone appropriate macvlan, do that instead of -N
 
 - Just use Docker for overlaying FS, use nsjail for isolation
   - Run Docker with privileged
