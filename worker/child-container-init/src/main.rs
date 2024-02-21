@@ -161,7 +161,11 @@ async fn run_this_stage(
         .arg("PATH=/bin");
 
     if constraints.networking {
-        cmd.arg("-N").arg("-R").arg("/etc/resolv.conf");
+        cmd.arg("-N")
+            .arg("-R")
+            .arg("/etc/resolv.conf")
+            .arg("-R")
+            .arg("/etc/ssl");
     }
 
     let mut cp = cmd
