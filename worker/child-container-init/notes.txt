@@ -1,0 +1,3 @@
+- Nix store on worker and clean up each time vs nix store in overlay?
+  - Use Nix store in overlay for isolation
+    - Submissions can communicate with each other if we have a shared nix store

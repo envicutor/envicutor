@@ -1,14 +1,5 @@
-- Nix store on worker and clean up each time vs nix store in overlay?
-  - Use Nix store in overlay for isolation
-    - Submissions can communicate with each other if we have a shared nix store
-  - How to isolate network in nsjail while still having internet access?
-    - Clone appropriate macvlan, do that instead of -N
-
-- Just use Docker for overlaying FS, use nsjail for isolation
-  - Run Docker with privileged
-  - Run the container as non-root user, run nsjail as root user via setuid?
-    - Install nix for another user
-    - In nsjail map to the user who has nix installed
+- How to isolate network in nsjail while still having internet access?
+  - Clone appropriate macvlan, do that instead of -N
 
 - More versatile Docker cache
 - Report resource consumption
