@@ -1,7 +1,7 @@
 - How to isolate network in nsjail while still having internet access?
   - Clone appropriate macvlan, do that instead of -N
+  - Experiment with multiple docker networks
 
-- More versatile Docker cache
 - Report resource consumption
 	- Because we are wrapping inside of nsjail, we can't get the exit signal properly
     - Use time to get the exit signal?
