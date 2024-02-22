@@ -1,6 +1,24 @@
 - How to isolate network in nsjail while still having internet access?
   - Clone appropriate macvlan, do that instead of -N
+    - How to find out the network interface to clone?
+      - Define the network interface name while creating the Docker container, clone this network interface name in
+        nsjail?
+  - separate the worker into worker master and worker slave
+    - worker slave is the one which runs the code
+    - it only has network access to the worker master and to the cache server
   - Experiment with multiple docker networks
+- what is the problem?
+  - nsjail should have
+    - internet access
+    - access to the cache server
+  - child container should have
+    - internet access
+    - access to the cache server
+    - access to the in memory database
+    - access to the database
+    - access to the request handler
+  - nsjail shouldn't access the last two
+    - so we can't use the network interfaces from the child container in nsjail (-N) since extra stuff will be cloned
 
 - Report resource consumption
 	- Because we are wrapping inside of nsjail, we can't get the exit signal properly
