@@ -1,38 +1,48 @@
+- Conduct an experiment that shows the communication between the child container in the worker and the cache server
+  - Sysbox in the kubernetes architecture
+  - A container with docker installed (container A)
+  - A container serving at some port (container B)
+  - Create a child container in container A and try to send a request to container B from the child
+
 - How to isolate network in nsjail while still having internet access?
-  - Clone appropriate macvlan, do that instead of -N
+  - Clone appropriate macvlan, do that instead of -n
     - How to find out the network interface to clone?
-      - Define the network interface name while creating the Docker container, clone this network interface name in
+      - Define the network interface name while creating the docker container, clone this network interface name in
         nsjail?
-  - separate the worker into worker master and worker slave
-    - worker slave is the one which runs the code
-    - it only has network access to the worker master and to the cache server
+  - Separate the worker into worker master and worker slave
+    - Worker slave is the one which runs the code
+    - It only has network access to the worker master and to the cache server
+    - How do we connect between master and slave?
+      - Websockets?
+        - Can the response be faked from within the container in the slave?
+    - Does cloning a network in nsjail ensure we have access to the other hosts on the network?
   - Experiment with multiple docker networks
-- what is the problem?
-  - nsjail should have
-    - internet access
-    - access to the cache server
-  - child container should have
-    - internet access
-    - access to the cache server
-    - access to the in memory database
-    - access to the database
-    - access to the request handler
-  - nsjail shouldn't access the last two
-    - so we can't use the network interfaces from the child container in nsjail (-N) since extra stuff will be cloned
+- What is the problem?
+  - Nsjail should have
+    - Internet access
+    - Access to the cache server
+  - Worker container should have
+    - Internet access
+    - Access to the cache server
+    - Access to the in memory database
+    - Access to the database
+    - Access to the request handler
+  - Nsjail shouldn't access the last two
+    - So we can't use the network interfaces from the child container in nsjail (-N) since extra stuff will be cloned
 
 - Report resource consumption
 	- Because we are wrapping inside of nsjail, we can't get the exit signal properly
     - Use time to get the exit signal?
-      - time does not get the exit signal
-	- nsjail really_quiet
-- Explain Some(), unwrap(), take()
+      - Time does not get the exit signal
+	- Nsjail really_quiet
+- Explain some(), unwrap(), take()
 - Fix to_string
-- str, String optimizations
+- Str, string optimizations
 - Remove unwraps
   - Handle no exit signal
 - Parse cmd opts
 - Talk about question mark
-- Credit Sandkasten
+- Credit sandkasten
 - Mount more stuff
 - Notify about limits violated
 - Add file descriptors to limits (docs)
