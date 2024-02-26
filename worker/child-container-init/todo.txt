@@ -1,3 +1,4 @@
+- Type aliases or better struct field names to specify the units in StageConstraints
 - Conduct an experiment that shows the communication between the child container in the worker and the cache server
   - Sysbox in the kubernetes architecture
   - A container with docker installed (container A)
