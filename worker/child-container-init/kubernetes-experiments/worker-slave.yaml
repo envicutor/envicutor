@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: worker-slave
+  labels:
+    name: worker-slave
+spec:
+  containers:
+  - name: worker-slave
+    image: docker:25.0.3-dind
+    securityContext:
+      privileged: true
+

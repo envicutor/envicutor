@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: cache-server
+  labels:
+    name: cache-server
+spec:
+  containers:
+  - name: cache-server
+    image: docker.io/library/http-server:latest
+    imagePullPolicy: Never
+    ports:
+    - containerPort: 8000
+
