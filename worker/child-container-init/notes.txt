@@ -1,3 +1,7 @@
 - Nix store on worker and clean up each time vs nix store in overlay?
   - Use Nix store in overlay for isolation
     - Submissions can communicate with each other if we have a shared nix store
+- Master worker
+  - Has access to the network that contains the submission database
+- Slave worker
+  - Only has network access to the cache server and the master worker

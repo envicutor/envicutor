@@ -1,7 +1,15 @@
+volumes:
+  nix:
+    external: false
+  envicutor:
+    external: false
+
 services:
   runner:
     build: .
     volumes:
       - ./test:/submission
+      - nix:/nix
+      - envicutor:/home/envicutor
     privileged: true
     cgroup: host
