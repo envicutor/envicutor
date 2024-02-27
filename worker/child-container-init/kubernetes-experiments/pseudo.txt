@@ -1,3 +1,0 @@
-- Pod with a container that has docker socket mounted
-  - Starts the docker container using the bridge network driver, tries to message the http server
-- Pod with a container serving an HTTP server
