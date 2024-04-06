@@ -30,10 +30,10 @@ struct StageConstraints {
 }
 
 #[derive(Serialize, Deserialize)]
-struct StageOutput {
-    stage: String,
-    stdout: String,
-    stderr: String,
+struct StageOutput<'a> {
+    stage: &'a str,
+    stdout: &'a str,
+    stderr: &'a str,
     time: u32,
     code: i32,
     signal: &'static str,
@@ -107,6 +107,10 @@ fn translate_signal(signal: i32) -> &'static str {
     }
 }
 
+const DEPENDENCIES_STAGE: &str = "dependencies";
+const COMPILE_STAGE: &str = "compile";
+const RUN_STAGE: &str = "run";
+
 async fn run_this_stage(
     stage: &str,
     main_program: &str,
@@ -173,9 +177,13 @@ async fn run_this_stage(
             .arg("/etc/ssl");
     }
 
+    cmd.arg("--").arg(format!("{}/nix-shell", nix_bin_path));
+
+    if stage != DEPENDENCIES_STAGE {
+        cmd.arg("--no-substitute");
+    }
+
     let mut cp = cmd
-        .arg("--")
-        .arg(format!("{}/nix-shell", nix_bin_path))
         .arg("shell.nix")
         .arg("--run")
         .arg(main_program)
@@ -210,9 +218,9 @@ async fn run_this_stage(
     let stderr = String::from_utf8_lossy(&stderr).into_owned();
 
     let stage_output = StageOutput {
-        stage: stage.to_string(),
-        stdout,
-        stderr,
+        stage,
+        stdout: stdout.as_str(),
+        stderr: stderr.as_str(),
         time: 0,
         code: exit_status.code().unwrap(),
         signal: translate_signal(exit_status.signal().unwrap_or(-1)),
@@ -237,7 +245,7 @@ async fn main() {
     };
 
     if !run_this_stage(
-        "dependencies",
+        DEPENDENCIES_STAGE,
         "sleep 0",
         &[],
         None,
@@ -251,7 +259,7 @@ async fn main() {
 
     if fs::try_exists("cutor-compile.sh").await.unwrap()
         && !run_this_stage(
-            "compile",
+            COMPILE_STAGE,
             "./cutor-compile.sh",
             &[],
             None,
@@ -264,7 +272,7 @@ async fn main() {
     }
 
     if !run_this_stage(
-        "run",
+        RUN_STAGE,
         "./cutor-run.sh",
         &[],
         Some("hello world"),
