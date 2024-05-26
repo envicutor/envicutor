@@ -3,7 +3,7 @@ volumes:
     external: false
 
 services:
-  runner:
+  worker:
     build: .
     volumes:
       - ./test:/submission

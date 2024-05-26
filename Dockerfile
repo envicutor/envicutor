@@ -7,7 +7,7 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
   --mount=type=cache,target=/app/target \
   cargo build --release && \
   mkdir /release && \
-  cp -r ./target/release/child-container-init /release/child-container-init
+  cp -r ./target/release/envicutor /release/envicutor
 
 
 FROM alpine:3.19.1
@@ -23,5 +23,5 @@ USER envicutor
 RUN /bin/bash -c "curl -L https://nixos.org/nix/install | sh"
 # run the binary
 WORKDIR /app
-COPY --from=build /release/child-container-init /app
-CMD ["/app/child-container-init"]
+COPY --from=build /release/envicutor /app
+CMD ["/app/envicutor"]

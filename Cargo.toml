@@ -1,5 +1,5 @@
 [package]
-name = "child-container-init"
+name = "envicutor"
 version = "0.1.0"
 edition = "2021"
 

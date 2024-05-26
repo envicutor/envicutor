@@ -1,0 +1,6 @@
+- install_package(semaphore, glob box_id, db, req):
+  - semaphore acquire
+  - ++box_id % MAX_BOX_ID
+  - workdir = `isolate --init --cg -b{current_box_number}`
+  - isolate --run --cg -b{current_box_number} nix-shell
+  - semaphore release
