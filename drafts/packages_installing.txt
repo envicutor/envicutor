@@ -20,8 +20,9 @@ MAX_BOX_ID = 2 ** 23
 METADATA_FILE_NAME = "metadata.txt"
 
 - async install_package(semaphore, glob box_id, db, req, res):
-  - ++box_id % MAX_BOX_ID
-  - workdir = exec `isolate --init --cg -b{current_box_number}`
+  - box_id = (box_id + 1) % MAX_BOX_ID
+  - current_box_id = box_id
+  - workdir = exec `isolate --init --cg -b{current_box_id}`
   - metadata_file_path = '{workdir}/{METADATA_FILE_NAME}'
   - write req.bod.nix_shell into workdir/box/shell.nix
   - semaphore acquire
@@ -35,7 +36,7 @@ METADATA_FILE_NAME = "metadata.txt"
     --open-files={req.max_open_files}
     --fsize={req.max_file_size}
     --processes={req.max_number_of_processes}
-    -b{current_box_number}
+    -b{current_box_id}
     --
     nix-shell shell.nix --run export`
   - semaphore release

@@ -1,12 +1,1 @@
-- Report resource consumption
-	- Because we are wrapping inside of nsjail, we can't get the exit signal properly
-    - Use time to get the exit signal?
-      - Time does not get the exit signal
-	- Nsjail log to another file
-- Remove unwraps
-  - Handle no exit signal
-- Parse cmd opts
-- Mount more stuff
-- Notify about limits violated
-- Add file descriptors to limits (docs)
-- Add networking to limits (docs)
+- Optionally take id for runtime and make sure it does not exist
