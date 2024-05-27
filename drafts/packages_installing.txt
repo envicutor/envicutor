@@ -1,6 +1,87 @@
-- install_package(semaphore, glob box_id, db, req):
-  - semaphore acquire
+runtime
+  - id: int auto increment
+  - name: string
+  - nix_shell: string
+  - environment: string
+
+===================
+
+Limits {
+  wall_time: seconds,
+  cpu_time: seconds,
+  memory: kilobytes,
+  extra_time: seconds
+  max_open_files: int
+  max_file_size: kilobytes
+  max_number_of_processes: int
+}
+
+MAX_BOX_ID = 2 ** 23
+METADATA_FILE_NAME = "metadata.txt"
+
+- async install_package(semaphore, glob box_id, db, req, res):
   - ++box_id % MAX_BOX_ID
-  - workdir = `isolate --init --cg -b{current_box_number}`
-  - isolate --run --cg -b{current_box_number} nix-shell
+  - workdir = exec `isolate --init --cg -b{current_box_number}`
+  - metadata_file_path = '{workdir}/{METADATA_FILE_NAME}'
+  - write req.bod.nix_shell into workdir/box/shell.nix
+  - semaphore acquire
+  - cmd_res = exec `isolate --run
+    --meta={metadata_file_path}
+    --cg
+    --cg-mem={req.memory}
+    --wall-time={req.wall_time}
+    --time={req.cpu_time}
+    --extra-time={req.extra_time}
+    --open-files={req.max_open_files}
+    --fsize={req.max_file_size}
+    --processes={req.max_number_of_processes}
+    -b{current_box_number}
+    --
+    nix-shell shell.nix --run export`
   - semaphore release
+
+  - if (cmd_res exited without errors)
+    - stmt = db.getConnectionFromPool().prepareStatement("INSERT INTO runtime(name, nix_shell, environment) VALUES(:name, :nix_shell, :environment)")
+    - stmt.bindString("name", req.name);
+    - stmt.bindString("nix_shell", req.nix_shell);
+    - stmt.bindString("environment", cmd_res.stdout);
+    - stmt.execute()
+
+  - memory = null
+  - exit_code = null
+  - exit_signal = null
+  - exit_message = null
+  - exit_status = null
+  - stdout = cmd_res.stdout
+  - stderr = cmd_res.stderr
+  - cpu_time = null
+  - wall_time = null
+  - metadata_lines = read_lines(metadata_file_path)
+  - for line in metadata_lines:
+    - key, val = line.split(":")
+    - if key == "cgmem":
+      - exit_code = val
+    - else if key == "exitcode":
+      - exit_code = val
+    - else if key == "exitsig":
+      - exit_signal = val
+    - else if key == "message":
+      - exit_message = val
+    - else if key == "status":
+      - exit_status = val
+    - else if key == "time":
+      - cpu_time = val
+    - else if key == "time-wall":
+      - wall_time = val
+
+  - res.status(200).send({
+      memory,
+      exit_code,
+      exit_signal,
+      exit_message,
+      exit_status,
+      stdout,
+      stderr,
+      cpu_time,
+      wall_time
+    });
