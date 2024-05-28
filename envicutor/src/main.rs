@@ -13,7 +13,7 @@ use axum::{
     Json, Router,
 };
 use envicutor::{
-    limits::{Limits, MandatoryLimits, SystemLimits},
+    limits::{MandatoryLimits, SystemLimits},
     requests::AddRuntimeRequest,
 };
 use sqlx::{postgres::PgPoolOptions, Pool, Postgres};
@@ -61,8 +61,6 @@ impl IntoResponse for InternalError {
     }
 }
 
-fn get_bad_limits_message(limits: Limits) {}
-
 async fn install_package(
     system_limits: SystemLimits,
     semaphore: Arc<Semaphore>,
@@ -99,15 +97,15 @@ async fn install_package(
     let workdir_str = String::from_utf8_lossy(&workdir_output);
     let workdir = workdir_str.trim();
     let nix_shell_path = format!("{workdir}/box/shell.nix");
-    fs::write(&nix_shell_path, req.nix_shell)
+    fs::write(&nix_shell_path, &req.nix_shell)
         .await
         .map_err(|e| InternalError::NixShellWriting(e))?;
     let metadata_file_path = format!("{workdir}/{METADATA_FILE_NAME}");
+    let limits = req.get_limits(&system_limits.installation);
     let permit = semaphore
         .acquire()
         .await
         .map_err(|e| InternalError::SemaphoreAcquireError(e))?;
-
     drop(permit);
     Ok((StatusCode::OK, ().into_response()))
 }
@@ -115,35 +113,39 @@ async fn install_package(
 fn get_limits_from_env_var(prefix: &str) -> MandatoryLimits {
     MandatoryLimits {
         wall_time: env::var(format!("{prefix}_WALL_TIME"))
-            .expect(format!("Missing {prefix}_WALL_TIME environment variable").as_str())
+            .expect(&format!("Missing {prefix}_WALL_TIME environment variable"))
             .parse()
-            .expect(format!("Invalid {prefix}_WALL_TIME").as_str()),
+            .expect(&format!("Invalid {prefix}_WALL_TIME")),
         cpu_time: env::var(format!("{prefix}_CPU_TIME"))
-            .expect(format!("Missing {prefix}_CPU_TIME environment variable").as_str())
+            .expect(&format!("Missing {prefix}_CPU_TIME environment variable"))
             .parse()
-            .expect(format!("Invalid {prefix}_CPU_TIME").as_str()),
+            .expect(&format!("Invalid {prefix}_CPU_TIME")),
         memory: env::var(format!("{prefix}_MEMORY"))
-            .expect(format!("Missing {prefix}_MEMORY environment variable").as_str())
+            .expect(&format!("Missing {prefix}_MEMORY environment variable"))
             .parse()
-            .expect(format!("Invalid {prefix}_MEMORY").as_str()),
+            .expect(&format!("Invalid {prefix}_MEMORY")),
         extra_time: env::var(format!("{prefix}_EXTRA_TIME"))
-            .expect(format!("Missing {prefix}_EXTRA_TIME environment variable").as_str())
+            .expect(&format!("Missing {prefix}_EXTRA_TIME environment variable"))
             .parse()
-            .expect(format!("Invalid {prefix}_EXTRA_TIME").as_str()),
+            .expect(&format!("Invalid {prefix}_EXTRA_TIME")),
         max_open_files: env::var(format!("{prefix}_MAX_OPEN_FILES"))
-            .expect(format!("Missing {prefix}_MAX_OPEN_FILES environment variable").as_str())
+            .expect(&format!(
+                "Missing {prefix}_MAX_OPEN_FILES environment variable"
+            ))
             .parse()
-            .expect(format!("Invalid {prefix}_MAX_OPEN_FILES").as_str()),
+            .expect(&format!("Invalid {prefix}_MAX_OPEN_FILES")),
         max_file_size: env::var(format!("{prefix}_MAX_FILE_SIZE"))
-            .expect(format!("Missing {prefix}_MAX_FILE_SIZE environment variable").as_str())
+            .expect(&format!(
+                "Missing {prefix}_MAX_FILE_SIZE environment variable"
+            ))
             .parse()
-            .expect(format!("Invalid {prefix}_MAX_FILE_SIZE").as_str()),
+            .expect(&format!("Invalid {prefix}_MAX_FILE_SIZE")),
         max_number_of_processes: env::var(format!("{prefix}_MAX_NUMBER_OF_PROCESSES"))
-            .expect(
-                format!("Missing {prefix}_MAX_NUMBER_OF_PROCESSES environment variable").as_str(),
-            )
+            .expect(&format!(
+                "Missing {prefix}_MAX_NUMBER_OF_PROCESSES environment variable"
+            ))
             .parse()
-            .expect(format!("Invalid {prefix}_MAX_NUMBER_OF_PROCESSES").as_str()),
+            .expect(&format!("Invalid {prefix}_MAX_NUMBER_OF_PROCESSES")),
     }
 }
 

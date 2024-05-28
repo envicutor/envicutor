@@ -75,6 +75,8 @@ METADATA_FILE_NAME = "metadata.txt"
     - else if key == "time-wall":
       - wall_time = val
 
+  - exec `isolate --cleanup --cg -b{current_box_id}`
+
   - res.status(200).send({
       memory,
       exit_code,
