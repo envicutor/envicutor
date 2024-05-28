@@ -24,7 +24,7 @@ METADATA_FILE_NAME = "metadata.txt"
   - current_box_id = box_id
   - workdir = exec `isolate --init --cg -b{current_box_id}`
   - metadata_file_path = '{workdir}/{METADATA_FILE_NAME}'
-  - write req.bod.nix_shell into workdir/box/shell.nix
+  - write req.nix_shell into workdir/box/shell.nix
   - semaphore acquire
   - cmd_res = exec `isolate --run
     --meta={metadata_file_path}

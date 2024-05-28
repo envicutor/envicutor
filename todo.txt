@@ -1,1 +1,3 @@
 - Optionally take id for runtime and make sure it does not exist
+- Ensure all boxes are cleaned on startup?
+- Number of concurrent workers must not exceed MAX_BOX_ID
