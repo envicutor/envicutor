@@ -1,64 +1,26 @@
 use std::{
-    env, io,
+    env,
     sync::{
         atomic::{AtomicU64, Ordering},
         Arc,
     },
 };
 
-use axum::{
-    http::StatusCode,
-    response::{IntoResponse, Response},
-    routing::post,
-    Json, Router,
-};
+use axum::{http::StatusCode, response::IntoResponse, routing::post, Json, Router};
 use envicutor::{
     limits::{MandatoryLimits, SystemLimits},
     requests::AddRuntimeRequest,
 };
 use sqlx::{postgres::PgPoolOptions, Pool, Postgres};
-use tokio::{
-    fs,
-    process::Command,
-    sync::{AcquireError, Semaphore},
-};
+use tokio::{fs, process::Command, sync::Semaphore};
 
 const MAX_BOX_ID: u64 = 900;
 const DEFAULT_PORT: &str = "5000";
 const METADATA_FILE_NAME: &str = "metadata.txt";
 
 #[derive(serde::Serialize)]
-struct Message<'a> {
-    message: &'a str,
-}
-
-enum InternalError {
-    IsolateEnvironmentCreation(io::Error),
-    NixShellWriting(io::Error),
-    SemaphoreAcquireError(AcquireError),
-}
-
-impl IntoResponse for InternalError {
-    fn into_response(self) -> Response {
-        match self {
-            InternalError::IsolateEnvironmentCreation(e) => {
-                eprintln!("Failed to create isolate environment: {e}");
-            }
-            InternalError::NixShellWriting(e) => {
-                eprintln!("Failed to write the nix shell file: {e}");
-            }
-            InternalError::SemaphoreAcquireError(e) => {
-                eprintln!("Failed to acquire semaphore: {e}");
-            }
-        };
-        return (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(Message {
-                message: "An internal error has occurred",
-            }),
-        )
-            .into_response();
-    }
+struct Message {
+    message: String,
 }
 
 async fn install_package(
@@ -67,7 +29,7 @@ async fn install_package(
     box_id: Arc<AtomicU64>,
     db_pool: Arc<Pool<Postgres>>,
     Json(req): Json<AddRuntimeRequest>,
-) -> Result<impl IntoResponse, InternalError> {
+) -> Result<impl IntoResponse, (StatusCode, impl IntoResponse)> {
     let bad_request_message = if req.name.is_empty() {
         "Name can't be empty"
     } else if req.nix_shell.is_empty() {
@@ -81,7 +43,7 @@ async fn install_package(
         return Ok((
             StatusCode::BAD_REQUEST,
             Json(Message {
-                message: bad_request_message,
+                message: bad_request_message.to_string(),
             })
             .into_response(),
         ));
@@ -92,20 +54,45 @@ async fn install_package(
         .args(&["--init", "--cg", &format!("-b{}", current_box_id)])
         .output()
         .await
-        .map_err(|e| InternalError::IsolateEnvironmentCreation(e))?
+        .map_err(|e| {
+            eprintln!("Could not create isolate environment: {e}");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(Message {
+                    message: "Internal server error".to_string(),
+                }),
+            )
+        })?
         .stdout;
     let workdir_str = String::from_utf8_lossy(&workdir_output);
     let workdir = workdir_str.trim();
     let nix_shell_path = format!("{workdir}/box/shell.nix");
     fs::write(&nix_shell_path, &req.nix_shell)
         .await
-        .map_err(|e| InternalError::NixShellWriting(e))?;
+        .map_err(|e| {
+            eprintln!("Could not create nix shell: {e}");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(Message {
+                    message: "Internal server error".to_string(),
+                }),
+            )
+        })?;
+
     let metadata_file_path = format!("{workdir}/{METADATA_FILE_NAME}");
-    let limits = req.get_limits(&system_limits.installation);
-    let permit = semaphore
-        .acquire()
-        .await
-        .map_err(|e| InternalError::SemaphoreAcquireError(e))?;
+    let limits = req
+        .get_limits(&system_limits.installation)
+        .map_err(|message| (StatusCode::BAD_REQUEST, Json(Message { message })))?;
+
+    let permit = semaphore.acquire().await.map_err(|e| {
+        eprintln!("Failed to acquire semaphore: {e}");
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(Message {
+                message: "Internal server error".to_string(),
+            }),
+        )
+    })?;
     drop(permit);
     Ok((StatusCode::OK, ().into_response()))
 }
