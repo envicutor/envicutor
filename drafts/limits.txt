@@ -1,0 +1,54 @@
+- struct Limits {
+    wall_time: Option<Seconds>,
+    cpu_time: Option<Seconds>,
+    memory: Option<Kilobytes>,
+    extra_time: Option<Seconds>,
+    max_open_files: Option<u32>,
+    max_file_size: Option<Kilobytes>,
+    max_number_of_processes: Option<u32>,
+}
+
+- Ensure each one of them does not exceed system maximum
+  - System maximum is defined in environment variables
+    - INSTALLATION_WALL_TIME
+    - INSTALLATION_CPU_TIME
+    - INSTALLATION_MEMORY
+    - INSTALLATION_EXTRA_TIME
+    - INSTALLATION_MAX_OPEN_FILES
+    - INSTALLATION_MAX_FILE_SIZE
+    - INSTALLATION_MAX_NUMBER_OF_PROCESSES
+    - COMPILE_WALL_TIME
+    - COMPILE_CPU_TIME
+    - COMPILE_MEMORY
+    - COMPILE_EXTRA_TIME
+    - COMPILE_MAX_OPEN_FILES
+    - COMPILE_MAX_FILE_SIZE
+    - COMPILE_MAX_NUMBER_OF_PROCESSES
+    - RUN_WALL_TIME
+    - RUN_CPU_TIME
+    - RUN_MEMORY
+    - RUN_EXTRA_TIME
+    - RUN_MAX_OPEN_FILES
+    - RUN_MAX_FILE_SIZE
+    - RUN_MAX_NUMBER_OF_PROCESSES
+    - ...
+  - Where are these environment variables checked?
+    - Should be checked at startup
+  - Will there be defaults for these environment variables? Or error when they are not provided?
+    - Error when they are not provided, provide a sample of them in the repo (in docker compose)
+
+SystemLimits {
+  installation: Limits,
+  compile: Limits,
+  run: Limits
+}
+
+- check_and_get_system_limits()
+  - expects
+
+- install_package()
+  - Make sure request limits don't exceed system limits
+
+- Problem
+  - Every time a field gets added in Limits, we have to remember to validate it in limits validation
+  - Possible solution: implement getter for Limits, this getter should take MandatoryLimits to validate against

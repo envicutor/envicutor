@@ -12,9 +12,16 @@ use axum::{
     routing::post,
     Json, Router,
 };
-use serde::Deserialize;
+use envicutor::{
+    limits::{Limits, MandatoryLimits, SystemLimits},
+    requests::AddRuntimeRequest,
+};
 use sqlx::{postgres::PgPoolOptions, Pool, Postgres};
-use tokio::{process::Command, sync::Semaphore};
+use tokio::{
+    fs,
+    process::Command,
+    sync::{AcquireError, Semaphore},
+};
 
 const MAX_BOX_ID: u64 = 900;
 const DEFAULT_PORT: &str = "5000";
@@ -25,17 +32,10 @@ struct Message<'a> {
     message: &'a str,
 }
 
-#[derive(Deserialize)]
-struct AddRuntimeRequest {
-    name: String,
-    description: String,
-    nix_shell: String,
-    compile_command: String,
-    run_command: String,
-}
-
 enum InternalError {
     IsolateEnvironmentCreation(io::Error),
+    NixShellWriting(io::Error),
+    SemaphoreAcquireError(AcquireError),
 }
 
 impl IntoResponse for InternalError {
@@ -43,6 +43,12 @@ impl IntoResponse for InternalError {
         match self {
             InternalError::IsolateEnvironmentCreation(e) => {
                 eprintln!("Failed to create isolate environment: {e}");
+            }
+            InternalError::NixShellWriting(e) => {
+                eprintln!("Failed to write the nix shell file: {e}");
+            }
+            InternalError::SemaphoreAcquireError(e) => {
+                eprintln!("Failed to acquire semaphore: {e}");
             }
         };
         return (
@@ -55,7 +61,10 @@ impl IntoResponse for InternalError {
     }
 }
 
+fn get_bad_limits_message(limits: Limits) {}
+
 async fn install_package(
+    system_limits: SystemLimits,
     semaphore: Arc<Semaphore>,
     box_id: Arc<AtomicU64>,
     db_pool: Arc<Pool<Postgres>>,
@@ -89,13 +98,65 @@ async fn install_package(
         .stdout;
     let workdir_str = String::from_utf8_lossy(&workdir_output);
     let workdir = workdir_str.trim();
-    let metadata_file_path = format!("{workdir}/{METADATA_FILE_NAME}");
     let nix_shell_path = format!("{workdir}/box/shell.nix");
+    fs::write(&nix_shell_path, req.nix_shell)
+        .await
+        .map_err(|e| InternalError::NixShellWriting(e))?;
+    let metadata_file_path = format!("{workdir}/{METADATA_FILE_NAME}");
+    let permit = semaphore
+        .acquire()
+        .await
+        .map_err(|e| InternalError::SemaphoreAcquireError(e))?;
+
+    drop(permit);
     Ok((StatusCode::OK, ().into_response()))
+}
+
+fn get_limits_from_env_var(prefix: &str) -> MandatoryLimits {
+    MandatoryLimits {
+        wall_time: env::var(format!("{prefix}_WALL_TIME"))
+            .expect(format!("Missing {prefix}_WALL_TIME environment variable").as_str())
+            .parse()
+            .expect(format!("Invalid {prefix}_WALL_TIME").as_str()),
+        cpu_time: env::var(format!("{prefix}_CPU_TIME"))
+            .expect(format!("Missing {prefix}_CPU_TIME environment variable").as_str())
+            .parse()
+            .expect(format!("Invalid {prefix}_CPU_TIME").as_str()),
+        memory: env::var(format!("{prefix}_MEMORY"))
+            .expect(format!("Missing {prefix}_MEMORY environment variable").as_str())
+            .parse()
+            .expect(format!("Invalid {prefix}_MEMORY").as_str()),
+        extra_time: env::var(format!("{prefix}_EXTRA_TIME"))
+            .expect(format!("Missing {prefix}_EXTRA_TIME environment variable").as_str())
+            .parse()
+            .expect(format!("Invalid {prefix}_EXTRA_TIME").as_str()),
+        max_open_files: env::var(format!("{prefix}_MAX_OPEN_FILES"))
+            .expect(format!("Missing {prefix}_MAX_OPEN_FILES environment variable").as_str())
+            .parse()
+            .expect(format!("Invalid {prefix}_MAX_OPEN_FILES").as_str()),
+        max_file_size: env::var(format!("{prefix}_MAX_FILE_SIZE"))
+            .expect(format!("Missing {prefix}_MAX_FILE_SIZE environment variable").as_str())
+            .parse()
+            .expect(format!("Invalid {prefix}_MAX_FILE_SIZE").as_str()),
+        max_number_of_processes: env::var(format!("{prefix}_MAX_NUMBER_OF_PROCESSES"))
+            .expect(
+                format!("Missing {prefix}_MAX_NUMBER_OF_PROCESSES environment variable").as_str(),
+            )
+            .parse()
+            .expect(format!("Invalid {prefix}_MAX_NUMBER_OF_PROCESSES").as_str()),
+    }
+}
+
+fn check_and_get_system_limits() -> SystemLimits {
+    return SystemLimits {
+        installation: get_limits_from_env_var("INSTALLATION"),
+    };
 }
 
 #[tokio::main]
 async fn main() {
+    let system_limits = check_and_get_system_limits();
+    // Currently we only allow one package installation at a time to avoid concurrency issues with Nix
     let installation_semaphore = Arc::new(Semaphore::new(1));
     let box_id = Arc::new(AtomicU64::new(0));
     let db_user = env::var("DB_USER").expect("Need a DB_USER environment variable");
@@ -114,10 +175,11 @@ async fn main() {
     let app = Router::new().route(
         "/install",
         post({
+            let system_limits = system_limits.clone();
             let installation_semaphore = installation_semaphore.clone();
             let box_id = box_id.clone();
             let db_pool = db_pool.clone();
-            move |req| install_package(installation_semaphore, box_id, db_pool, req)
+            move |req| install_package(system_limits, installation_semaphore, box_id, db_pool, req)
         }),
     );
 
