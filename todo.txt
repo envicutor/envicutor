@@ -1,2 +1,21 @@
-- Optionally take id for runtime and make sure it does not exist
+- Use isolate mount instead of copying into box to avoid escalating with sudo
+- Use isolate volume to mount nix store R/W
+- Clean up after errors
+- Ensure name does not exist
+- Load runtimes into cache on startup
+- Delete runtimes (maybe from database only)
 - Ensure all boxes are cleaned on startup?
+- Who provides files?
+  - Provide main file name on server
+  - Note: if you have multiple files then you are probably aware of the programming language being used
+- Use clippy
+- Nix runtimes will be inconsistent if we use non-deterministic nix channels and a worker gets added after a nix channel was updated
+  - Disable nix channels
+
+- Suggested architecture
+  - Directory containing runtime ids
+    - compile_script (if any)
+    - run_script
+    - env
+    - shell.nix
+    - metadata (to be stored in memory, Judge0 stores them in a database)

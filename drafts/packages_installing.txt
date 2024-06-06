@@ -1,8 +1,7 @@
 runtime
   - id: int auto increment
   - name: string
-  - nix_shell: string
-  - environment: string
+  - source_file_name: string
 
 ===================
 
@@ -19,16 +18,21 @@ Limits {
 MAX_BOX_ID = 2 ** 23
 METADATA_FILE_NAME = "metadata.txt"
 
-- async install_package(semaphore, glob box_id, db, req, res):
+- async install_package(semaphore, glob box_id, glob metadata_cache, db, req, res):
   - box_id = (box_id + 1) % MAX_BOX_ID
   - current_box_id = box_id
-  - workdir = exec `isolate --init --cg -b{current_box_id}`
+  - isolate --init -b{current_box_id}
+  - workdir = "/tmp/{current_box_id}"
   - metadata_file_path = '{workdir}/{METADATA_FILE_NAME}'
-  - write req.nix_shell into workdir/box/shell.nix
+  - rm -rf workdir
+  - mkdir workdir
+  - write req.nix_shell into {workdir}/shell.nix
   - semaphore acquire
   - cmd_res = exec `isolate --run
     --meta={metadata_file_path}
     --cg
+    --dir=/nix/store:rw,dev
+    --dir={workdir}
     --cg-mem={req.memory}
     --wall-time={req.wall_time}
     --time={req.cpu_time}
@@ -38,15 +42,30 @@ METADATA_FILE_NAME = "metadata.txt"
     --processes={req.max_number_of_processes}
     -b{current_box_id}
     --
-    nix-shell shell.nix --run export`
-  - semaphore release
+    nix-shell {workdir}/shell.nix --run export`
 
   - if (cmd_res exited without errors)
-    - stmt = db.getConnectionFromPool().prepareStatement("INSERT INTO runtime(name, nix_shell, environment) VALUES(:name, :nix_shell, :environment)")
+    - stmt = db.prepare("INSERT INTO runtime(name, source_file_name) VALUES(:name, :source_file_name)")
     - stmt.bindString("name", req.name);
-    - stmt.bindString("nix_shell", req.nix_shell);
-    - stmt.bindString("environment", cmd_res.stdout);
+    - stmt.bindString("source_file_name", req.source_file_name);
     - stmt.execute()
+
+  - runtime_id = db.execute("SELECT last_insert_rowid()").first()[0]
+  - rm -rf /envicutor/runtimes/{runtime_id}
+  - mkdir /envicutor/runtimes/{runtime_id}
+  - if req.compile_script is not null
+    - write(/envicutor/runtimes/{runtime_id}/compile, req.compile_script)
+    - chmod a+x /envicutor/runtimes/{runtime_id}/compile
+  - write(/envicutor/runtimes/{runtime_id}/run, req.run_script)
+  - chmod a+x /envicutor/runtimes/{runtime_id}/run
+  - write(/envicutor/runtimes/{runtime_id}/env, cmd_res.output)
+  - chmod a+x /envicutor/runtimes/{runtime_id}/env
+  - write(/envicutor/runtimes/{runtime_id}/shell.nix, req.nix_shell)
+  - metadata_cache.set(runtime_id, {name: req.name})
+
+  - semaphore release
+
+  - exec `isolate --cleanup --cg -b{current_box_id}`
 
   - memory = null
   - exit_code = null
@@ -75,7 +94,7 @@ METADATA_FILE_NAME = "metadata.txt"
     - else if key == "time-wall":
       - wall_time = val
 
-  - exec `isolate --cleanup --cg -b{current_box_id}`
+  - rm -r {workdir}
 
   - res.status(200).send({
       memory,

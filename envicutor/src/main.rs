@@ -11,7 +11,6 @@ use envicutor::{
     limits::{MandatoryLimits, SystemLimits},
     requests::AddRuntimeRequest,
 };
-use sqlx::{postgres::PgPoolOptions, Pool, Postgres};
 use tokio::{fs, process::Command, sync::Semaphore};
 
 const MAX_BOX_ID: u64 = 900;
@@ -27,7 +26,6 @@ async fn install_package(
     system_limits: SystemLimits,
     semaphore: Arc<Semaphore>,
     box_id: Arc<AtomicU64>,
-    db_pool: Arc<Pool<Postgres>>,
     Json(req): Json<AddRuntimeRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, impl IntoResponse)> {
     let bad_request_message = if req.name.is_empty() {
@@ -36,6 +34,8 @@ async fn install_package(
         "Nix shell can't be empty"
     } else if req.run_command.is_empty() {
         "Run command can't be empty"
+    } else if req.source_file_name.is_empty() {
+        "Source file name can't be empty"
     } else {
         ""
     };
@@ -50,7 +50,7 @@ async fn install_package(
     }
 
     let current_box_id = box_id.fetch_add(1, Ordering::SeqCst) % MAX_BOX_ID;
-    let workdir_output = Command::new("isolate")
+    Command::new("isolate")
         .args(&["--init", "--cg", &format!("-b{}", current_box_id)])
         .output()
         .await
@@ -62,10 +62,9 @@ async fn install_package(
                     message: "Internal server error".to_string(),
                 }),
             )
-        })?
-        .stdout;
-    let workdir_str = String::from_utf8_lossy(&workdir_output);
-    let workdir = workdir_str.trim();
+        })?;
+
+    let workdir = format!("/tmp/{current_box_id}");
     let nix_shell_path = format!("{workdir}/box/shell.nix");
     fs::write(&nix_shell_path, &req.nix_shell)
         .await
@@ -152,14 +151,6 @@ async fn main() {
     let db_password = env::var("DB_PASSWORD").expect("Need a DB_PASSWORD environment variable");
     let db_name = env::var("DB_NAME").expect("Need a DB_NAME environment variable");
     let db_host = env::var("DB_HOST").expect("Need a DB_HOST environment variable");
-    let connection_string = format!("postgres://{db_user}:{db_password}@{db_host}/{db_name}");
-    let db_pool = Arc::new(
-        PgPoolOptions::new()
-            .max_connections(50)
-            .connect(&connection_string)
-            .await
-            .unwrap(),
-    );
 
     let app = Router::new().route(
         "/install",
@@ -167,8 +158,7 @@ async fn main() {
             let system_limits = system_limits.clone();
             let installation_semaphore = installation_semaphore.clone();
             let box_id = box_id.clone();
-            let db_pool = db_pool.clone();
-            move |req| install_package(system_limits, installation_semaphore, box_id, db_pool, req)
+            move |req| install_package(system_limits, installation_semaphore, box_id, req)
         }),
     );
 
