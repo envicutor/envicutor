@@ -89,6 +89,7 @@ async fn install_package(
             }),
         )
     })?;
+
     let nix_shell_path = format!("{workdir}/box/shell.nix");
     fs::write(&nix_shell_path, &req.nix_shell)
         .await
@@ -116,6 +117,7 @@ async fn install_package(
             }),
         )
     })?;
+
     let cmd_res = Command::new("isolate")
         .args(&[
             "--run",
@@ -148,9 +150,11 @@ async fn install_package(
                 }),
             )
         })?;
+
     if cmd_res.status.success() {
-        let runtime_name = req.name.clone();
-        let source_file_name = req.source_file_name.clone();
+        let runtime_name = req.name;
+        let source_file_name = req.source_file_name;
+
         let runtime_id: u32 = task::spawn_blocking(move || {
             let connection = Connection::open(DB_PATH).map_err(|e| {
                 eprintln!("Failed to open SQLite connection: {e}");
@@ -161,6 +165,7 @@ async fn install_package(
                     }),
                 )
             })?;
+
             connection
                 .execute(
                     "INSERT INTO runtime (name, source_file_name) VALUES (?, ?)",
@@ -175,6 +180,7 @@ async fn install_package(
                         }),
                     )
                 })?;
+
             let row_id = connection
                 .query_row("SELECT last_insert_rowid()", (), |row| row.get(0))
                 .map_err(|e| {
@@ -186,6 +192,7 @@ async fn install_package(
                         }),
                     )
                 })?;
+
             Ok::<u32, (StatusCode, Json<Message>)>(row_id)
         })
         .await
@@ -198,6 +205,7 @@ async fn install_package(
                 }),
             )
         })??;
+
         let runtime_dir = format!("/envicutor/runtimes/{runtime_id}");
         // Consider abstracting if more duplications of exists+remove+create arise
         if let Ok(true) = fs::try_exists(&runtime_dir).await {
@@ -220,17 +228,7 @@ async fn install_package(
                 }),
             )
         })?;
-        /*
-            - if req.compile_script is not null
-                - write({runtime_dir}/compile, req.compile_script)
-                - chmod a+x {runtime_dir}/compile
-            - write({runtime_dir}/run, req.run_script)
-            - chmod a+x {runtime_dir}/run
-            - write({runtime_dir}/env, cmd_res.output)
-            - chmod a+x {runtime_dir}/env
-            - write({runtime_dir}/shell.nix, req.nix_shell)
-            - metadata_cache.set(runtime_id, {name: req.name})
-        */
+
         if !req.compile_script.is_empty() {
             let compile_script_path = format!("{runtime_dir}/compile");
             fs::write(&compile_script_path, req.compile_script)
@@ -317,6 +315,9 @@ async fn install_package(
                 )
             })?;
     }
+    /*
+    - metadata_cache.set(runtime_id, {name: req.name})
+    */
 
     drop(permit);
     Ok((StatusCode::OK, ().into_response()))
