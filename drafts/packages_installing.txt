@@ -49,19 +49,18 @@ METADATA_FILE_NAME = "metadata.txt"
     - stmt.bindString("name", req.name);
     - stmt.bindString("source_file_name", req.source_file_name);
     - stmt.execute()
-
-  - runtime_id = db.execute("SELECT last_insert_rowid()").first()[0]
-  - rm -rf /envicutor/runtimes/{runtime_id}
-  - mkdir /envicutor/runtimes/{runtime_id}
-  - if req.compile_script is not null
-    - write(/envicutor/runtimes/{runtime_id}/compile, req.compile_script)
-    - chmod a+x /envicutor/runtimes/{runtime_id}/compile
-  - write(/envicutor/runtimes/{runtime_id}/run, req.run_script)
-  - chmod a+x /envicutor/runtimes/{runtime_id}/run
-  - write(/envicutor/runtimes/{runtime_id}/env, cmd_res.output)
-  - chmod a+x /envicutor/runtimes/{runtime_id}/env
-  - write(/envicutor/runtimes/{runtime_id}/shell.nix, req.nix_shell)
-  - metadata_cache.set(runtime_id, {name: req.name})
+    - runtime_id = db.execute("SELECT last_insert_rowid()").first()[0]
+    - rm -rf /envicutor/runtimes/{runtime_id}
+    - mkdir /envicutor/runtimes/{runtime_id}
+    - if req.compile_script is not null
+      - write(/envicutor/runtimes/{runtime_id}/compile, req.compile_script)
+      - chmod a+x /envicutor/runtimes/{runtime_id}/compile
+    - write(/envicutor/runtimes/{runtime_id}/run, req.run_script)
+    - chmod a+x /envicutor/runtimes/{runtime_id}/run
+    - write(/envicutor/runtimes/{runtime_id}/env, cmd_res.output)
+    - chmod a+x /envicutor/runtimes/{runtime_id}/env
+    - write(/envicutor/runtimes/{runtime_id}/shell.nix, req.nix_shell)
+    - metadata_cache.set(runtime_id, {name: req.name})
 
   - semaphore release
 

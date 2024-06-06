@@ -7,8 +7,8 @@ pub struct AddRuntimeRequest {
     pub name: String,
     pub description: String,
     pub nix_shell: String,
-    pub compile_command: String,
-    pub run_command: String,
+    pub compile_script: String,
+    pub run_script: String,
     pub source_file_name: String,
     limits: Option<Limits>,
 }

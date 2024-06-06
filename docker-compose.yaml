@@ -16,15 +16,3 @@ services:
       - '5000:5000'
     environment:
       - PORT=5000
-      - DB_PASSWORD=user123
-      - DB_USER=user
-      - DB_NAME=app
-      - DB_HOST=db
-  db:
-    build: ./db
-    volumes:
-      - db:/var/lib/postgresql/data
-    environment:
-      - POSTGRES_PASSWORD=user123
-      - POSTGRES_USER=user
-      - POSTGRES_DB=app

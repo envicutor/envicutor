@@ -1,7 +1,5 @@
-- Use isolate mount instead of copying into box to avoid escalating with sudo
-- Use isolate volume to mount nix store R/W
-- Clean up after errors
-- Ensure name does not exist
+- Clean up isolate, rollback after errors
+- Ensure runtime name does not exist
 - Load runtimes into cache on startup
 - Delete runtimes (maybe from database only)
 - Ensure all boxes are cleaned on startup?
@@ -19,3 +17,6 @@
     - env
     - shell.nix
     - metadata (to be stored in memory, Judge0 stores them in a database)
+
+- Directories to create in Docker container
+  - /envicutor/runtimes

@@ -1,5 +1,7 @@
 use std::{
     env,
+    fs::Permissions,
+    os::unix::fs::PermissionsExt,
     sync::{
         atomic::{AtomicU64, Ordering},
         Arc,
@@ -11,11 +13,13 @@ use envicutor::{
     limits::{MandatoryLimits, SystemLimits},
     requests::AddRuntimeRequest,
 };
-use tokio::{fs, process::Command, sync::Semaphore};
+use rusqlite::Connection;
+use tokio::{fs, process::Command, sync::Semaphore, task};
 
 const MAX_BOX_ID: u64 = 900;
 const DEFAULT_PORT: &str = "5000";
 const METADATA_FILE_NAME: &str = "metadata.txt";
+const DB_PATH: &str = "/envicutor/runtimes/db.sql";
 
 #[derive(serde::Serialize)]
 struct Message {
@@ -32,7 +36,7 @@ async fn install_package(
         "Name can't be empty"
     } else if req.nix_shell.is_empty() {
         "Nix shell can't be empty"
-    } else if req.run_command.is_empty() {
+    } else if req.run_script.is_empty() {
         "Run command can't be empty"
     } else if req.source_file_name.is_empty() {
         "Source file name can't be empty"
@@ -65,6 +69,26 @@ async fn install_package(
         })?;
 
     let workdir = format!("/tmp/{current_box_id}");
+    if let Ok(true) = fs::try_exists(&workdir).await {
+        fs::remove_dir_all(&workdir).await.map_err(|e| {
+            eprintln!("Failed to remove: {workdir}, error: {e}");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(Message {
+                    message: "Internal server error".to_string(),
+                }),
+            )
+        })?;
+    }
+    fs::create_dir(&workdir).await.map_err(|e| {
+        eprintln!("Failed to create: {workdir}, error: {e}");
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(Message {
+                message: "Internal server error".to_string(),
+            }),
+        )
+    })?;
     let nix_shell_path = format!("{workdir}/box/shell.nix");
     fs::write(&nix_shell_path, &req.nix_shell)
         .await
@@ -92,6 +116,208 @@ async fn install_package(
             }),
         )
     })?;
+    let cmd_res = Command::new("isolate")
+        .args(&[
+            "--run",
+            &format!("--meta={}", metadata_file_path),
+            "--cg",
+            "--dir=/nix/store:rw,dev",
+            &format!("--dir={}", workdir),
+            &format!("--cg-mem={}", limits.memory),
+            &format!("--wall-time={}", limits.wall_time),
+            &format!("--time={}", limits.cpu_time),
+            &format!("--extra-time={}", limits.extra_time),
+            &format!("--open-files={}", limits.max_open_files),
+            &format!("--fsize={}", limits.max_file_size),
+            &format!("--processes={}", limits.max_number_of_processes),
+            &format!("-b{}", current_box_id),
+            "--",
+            "nix-shell",
+            &format!("{}/shell.nix", workdir),
+            "--run",
+            "export",
+        ])
+        .output()
+        .await
+        .map_err(|e| {
+            eprintln!("Failed to run isolate command: {e}");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(Message {
+                    message: "Internal server error".to_string(),
+                }),
+            )
+        })?;
+    if cmd_res.status.success() {
+        let runtime_name = req.name.clone();
+        let source_file_name = req.source_file_name.clone();
+        let runtime_id: u32 = task::spawn_blocking(move || {
+            let connection = Connection::open(DB_PATH).map_err(|e| {
+                eprintln!("Failed to open SQLite connection: {e}");
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(Message {
+                        message: "Internal server error".to_string(),
+                    }),
+                )
+            })?;
+            connection
+                .execute(
+                    "INSERT INTO runtime (name, source_file_name) VALUES (?, ?)",
+                    (runtime_name, source_file_name),
+                )
+                .map_err(|e| {
+                    eprintln!("Failed to prepare statement: {e}");
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(Message {
+                            message: "Internal server error".to_string(),
+                        }),
+                    )
+                })?;
+            let row_id = connection
+                .query_row("SELECT last_insert_rowid()", (), |row| row.get(0))
+                .map_err(|e| {
+                    eprintln!("Failed to get last inserted row id: {e}");
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(Message {
+                            message: "Internal server error".to_string(),
+                        }),
+                    )
+                })?;
+            Ok::<u32, (StatusCode, Json<Message>)>(row_id)
+        })
+        .await
+        .map_err(|e| {
+            eprintln!("Failed to spawn blocking task: {e}");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(Message {
+                    message: "Internal server error".to_string(),
+                }),
+            )
+        })??;
+        let runtime_dir = format!("/envicutor/runtimes/{runtime_id}");
+        // Consider abstracting if more duplications of exists+remove+create arise
+        if let Ok(true) = fs::try_exists(&runtime_dir).await {
+            fs::remove_dir_all(&runtime_dir).await.map_err(|e| {
+                eprintln!("Failed to remove: {runtime_dir}, error: {e}");
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(Message {
+                        message: "Internal server error".to_string(),
+                    }),
+                )
+            })?;
+        }
+        fs::create_dir(&runtime_dir).await.map_err(|e| {
+            eprintln!("Failed to create: {runtime_dir}, error: {e}");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(Message {
+                    message: "Internal server error".to_string(),
+                }),
+            )
+        })?;
+        /*
+            - if req.compile_script is not null
+                - write({runtime_dir}/compile, req.compile_script)
+                - chmod a+x {runtime_dir}/compile
+            - write({runtime_dir}/run, req.run_script)
+            - chmod a+x {runtime_dir}/run
+            - write({runtime_dir}/env, cmd_res.output)
+            - chmod a+x {runtime_dir}/env
+            - write({runtime_dir}/shell.nix, req.nix_shell)
+            - metadata_cache.set(runtime_id, {name: req.name})
+        */
+        if !req.compile_script.is_empty() {
+            let compile_script_path = format!("{runtime_dir}/compile");
+            fs::write(&compile_script_path, req.compile_script)
+                .await
+                .map_err(|e| {
+                    eprintln!("Failed to write compile script: {e}");
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(Message {
+                            message: "Internal server error".to_string(),
+                        }),
+                    )
+                })?;
+            fs::set_permissions(&compile_script_path, Permissions::from_mode(0o755))
+                .await
+                .map_err(|e| {
+                    eprintln!("Failed to set permissions on compile script: {e}");
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(Message {
+                            message: "Internal server error".to_string(),
+                        }),
+                    )
+                })?;
+        }
+
+        let run_script_path = format!("{runtime_dir}/run");
+        fs::write(&run_script_path, &req.run_script)
+            .await
+            .map_err(|e| {
+                eprintln!("Failed to write run script: {e}");
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(Message {
+                        message: "Internal server error".to_string(),
+                    }),
+                )
+            })?;
+        fs::set_permissions(&run_script_path, Permissions::from_mode(0o755))
+            .await
+            .map_err(|e| {
+                eprintln!("Failed to set permissions on run script: {e}");
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(Message {
+                        message: "Internal server error".to_string(),
+                    }),
+                )
+            })?;
+
+        let env_script_path = format!("{runtime_dir}/env");
+        fs::write(&env_script_path, &cmd_res.stdout)
+            .await
+            .map_err(|e| {
+                eprintln!("Failed to write env script: {e}");
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(Message {
+                        message: "Internal server error".to_string(),
+                    }),
+                )
+            })?;
+        fs::set_permissions(&env_script_path, Permissions::from_mode(0o755))
+            .await
+            .map_err(|e| {
+                eprintln!("Failed to set permissions on env script: {e}");
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(Message {
+                        message: "Internal server error".to_string(),
+                    }),
+                )
+            })?;
+
+        fs::write(&(format!("{runtime_dir}/shell.nix")), &req.nix_shell)
+            .await
+            .map_err(|e| {
+                eprintln!("Failed to write shell.nix: {e}");
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(Message {
+                        message: "Internal server error".to_string(),
+                    }),
+                )
+            })?;
+    }
+
     drop(permit);
     Ok((StatusCode::OK, ().into_response()))
 }
@@ -144,14 +370,9 @@ fn check_and_get_system_limits() -> SystemLimits {
 #[tokio::main]
 async fn main() {
     let system_limits = check_and_get_system_limits();
-    // Currently we only allow one package installation at a time to avoid concurrency issues with Nix
+    // Currently we only allow one package installation at a time to avoid concurrency issues with Nix and SQLite
     let installation_semaphore = Arc::new(Semaphore::new(1));
     let box_id = Arc::new(AtomicU64::new(0));
-    let db_user = env::var("DB_USER").expect("Need a DB_USER environment variable");
-    let db_password = env::var("DB_PASSWORD").expect("Need a DB_PASSWORD environment variable");
-    let db_name = env::var("DB_NAME").expect("Need a DB_NAME environment variable");
-    let db_host = env::var("DB_HOST").expect("Need a DB_HOST environment variable");
-
     let app = Router::new().route(
         "/install",
         post({
