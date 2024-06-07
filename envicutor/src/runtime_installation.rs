@@ -9,7 +9,12 @@ use std::{
 };
 
 use crate::{limits::SystemLimits, requests::AddRuntimeRequest};
-use axum::{http::StatusCode, response::IntoResponse, Json};
+use axum::{
+    body::Body,
+    http::StatusCode,
+    response::{IntoResponse, Response},
+    Json,
+};
 use rusqlite::Connection;
 use tokio::{
     fs,
@@ -25,6 +30,11 @@ const DB_PATH: &str = "/envicutor/runtimes/db.sql";
 #[derive(serde::Serialize)]
 struct Message {
     message: String,
+}
+
+#[derive(serde::Serialize)]
+pub struct StaticMessage {
+    message: &'static str,
 }
 
 #[derive(serde::Serialize)]
@@ -54,7 +64,7 @@ fn split_metadata_line(line: &str) -> (Result<&str, ()>, Result<&str, ()>) {
     (key, value)
 }
 
-fn validate_request(req: &AddRuntimeRequest) -> Result<(), (StatusCode, Json<Message>)> {
+fn validate_request(req: &AddRuntimeRequest) -> Result<(), Response<Body>> {
     let bad_request_message = if req.name.is_empty() {
         "Name can't be empty"
     } else if req.nix_shell.is_empty() {
@@ -72,11 +82,19 @@ fn validate_request(req: &AddRuntimeRequest) -> Result<(), (StatusCode, Json<Mes
             Json(Message {
                 message: bad_request_message.to_string(),
             }),
-        ))
+        )
+            .into_response())
     } else {
         Ok(())
     }
 }
+
+const INTERNAL_SERVER_ERROR_RESPONSE: (StatusCode, Json<StaticMessage>) = (
+    StatusCode::INTERNAL_SERVER_ERROR,
+    Json(StaticMessage {
+        message: "Internal server error",
+    }),
+);
 
 pub async fn install_runtime(
     system_limits: SystemLimits,
@@ -84,7 +102,7 @@ pub async fn install_runtime(
     box_id: Arc<AtomicU64>,
     metadata_cache: Arc<RwLock<HashMap<u32, String>>>,
     Json(req): Json<AddRuntimeRequest>,
-) -> Result<impl IntoResponse, (StatusCode, impl IntoResponse)> {
+) -> Result<Response<Body>, Response<Body>> {
     validate_request(&req)?;
 
     let current_box_id = box_id.fetch_add(1, Ordering::SeqCst) % MAX_BOX_ID;
@@ -94,34 +112,19 @@ pub async fn install_runtime(
         .await
         .map_err(|e| {
             eprintln!("Could not create isolate environment: {e}");
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(Message {
-                    message: "Internal server error".to_string(),
-                }),
-            )
+            INTERNAL_SERVER_ERROR_RESPONSE.into_response()
         })?;
 
     let workdir = format!("/tmp/{current_box_id}");
     if let Ok(true) = fs::try_exists(&workdir).await {
         fs::remove_dir_all(&workdir).await.map_err(|e| {
             eprintln!("Failed to remove: {workdir}, error: {e}");
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(Message {
-                    message: "Internal server error".to_string(),
-                }),
-            )
+            INTERNAL_SERVER_ERROR_RESPONSE.into_response()
         })?;
     }
     fs::create_dir(&workdir).await.map_err(|e| {
         eprintln!("Failed to create: {workdir}, error: {e}");
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(Message {
-                message: "Internal server error".to_string(),
-            }),
-        )
+        INTERNAL_SERVER_ERROR_RESPONSE.into_response()
     })?;
 
     let nix_shell_path = format!("{workdir}/box/shell.nix");
@@ -129,27 +132,17 @@ pub async fn install_runtime(
         .await
         .map_err(|e| {
             eprintln!("Could not create nix shell: {e}");
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(Message {
-                    message: "Internal server error".to_string(),
-                }),
-            )
+            INTERNAL_SERVER_ERROR_RESPONSE.into_response()
         })?;
 
     let metadata_file_path = format!("{workdir}/{METADATA_FILE_NAME}");
     let limits = req
         .get_limits(&system_limits.installation)
-        .map_err(|message| (StatusCode::BAD_REQUEST, Json(Message { message })))?;
+        .map_err(|message| (StatusCode::BAD_REQUEST, Json(Message { message })).into_response())?;
 
     let permit = semaphore.acquire().await.map_err(|e| {
         eprintln!("Failed to acquire semaphore: {e}");
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(Message {
-                message: "Internal server error".to_string(),
-            }),
-        )
+        INTERNAL_SERVER_ERROR_RESPONSE.into_response()
     })?;
 
     let cmd_res = Command::new("isolate")
@@ -177,12 +170,7 @@ pub async fn install_runtime(
         .await
         .map_err(|e| {
             eprintln!("Failed to run isolate command: {e}");
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(Message {
-                    message: "Internal server error".to_string(),
-                }),
-            )
+            INTERNAL_SERVER_ERROR_RESPONSE.into_response()
         })?;
 
     if cmd_res.status.success() {
@@ -192,12 +180,7 @@ pub async fn install_runtime(
         let runtime_id: u32 = task::spawn_blocking(move || {
             let connection = Connection::open(DB_PATH).map_err(|e| {
                 eprintln!("Failed to open SQLite connection: {e}");
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(Message {
-                        message: "Internal server error".to_string(),
-                    }),
-                )
+                INTERNAL_SERVER_ERROR_RESPONSE.into_response()
             })?;
 
             connection
@@ -207,37 +190,22 @@ pub async fn install_runtime(
                 )
                 .map_err(|e| {
                     eprintln!("Failed to execute statement: {e}");
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        Json(Message {
-                            message: "Internal server error".to_string(),
-                        }),
-                    )
+                    INTERNAL_SERVER_ERROR_RESPONSE.into_response()
                 })?;
 
             let row_id = connection
                 .query_row("SELECT last_insert_rowid()", (), |row| row.get(0))
                 .map_err(|e| {
                     eprintln!("Failed to get last inserted row id: {e}");
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        Json(Message {
-                            message: "Internal server error".to_string(),
-                        }),
-                    )
+                    INTERNAL_SERVER_ERROR_RESPONSE.into_response()
                 })?;
 
-            Ok::<u32, (StatusCode, Json<Message>)>(row_id)
+            Ok::<u32, Response<Body>>(row_id)
         })
         .await
         .map_err(|e| {
             eprintln!("Failed to spawn blocking task: {e}");
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(Message {
-                    message: "Internal server error".to_string(),
-                }),
-            )
+            INTERNAL_SERVER_ERROR_RESPONSE.into_response()
         })??;
 
         let runtime_dir = format!("/envicutor/runtimes/{runtime_id}");
@@ -245,22 +213,12 @@ pub async fn install_runtime(
         if let Ok(true) = fs::try_exists(&runtime_dir).await {
             fs::remove_dir_all(&runtime_dir).await.map_err(|e| {
                 eprintln!("Failed to remove: {runtime_dir}, error: {e}");
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(Message {
-                        message: "Internal server error".to_string(),
-                    }),
-                )
+                INTERNAL_SERVER_ERROR_RESPONSE.into_response()
             })?;
         }
         fs::create_dir(&runtime_dir).await.map_err(|e| {
             eprintln!("Failed to create: {runtime_dir}, error: {e}");
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(Message {
-                    message: "Internal server error".to_string(),
-                }),
-            )
+            INTERNAL_SERVER_ERROR_RESPONSE.into_response()
         })?;
 
         if !req.compile_script.is_empty() {
@@ -269,23 +227,13 @@ pub async fn install_runtime(
                 .await
                 .map_err(|e| {
                     eprintln!("Failed to write compile script: {e}");
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        Json(Message {
-                            message: "Internal server error".to_string(),
-                        }),
-                    )
+                    INTERNAL_SERVER_ERROR_RESPONSE.into_response()
                 })?;
             fs::set_permissions(&compile_script_path, Permissions::from_mode(0o755))
                 .await
                 .map_err(|e| {
                     eprintln!("Failed to set permissions on compile script: {e}");
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        Json(Message {
-                            message: "Internal server error".to_string(),
-                        }),
-                    )
+                    INTERNAL_SERVER_ERROR_RESPONSE.into_response()
                 })?;
         }
 
@@ -294,23 +242,13 @@ pub async fn install_runtime(
             .await
             .map_err(|e| {
                 eprintln!("Failed to write run script: {e}");
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(Message {
-                        message: "Internal server error".to_string(),
-                    }),
-                )
+                INTERNAL_SERVER_ERROR_RESPONSE.into_response()
             })?;
         fs::set_permissions(&run_script_path, Permissions::from_mode(0o755))
             .await
             .map_err(|e| {
                 eprintln!("Failed to set permissions on run script: {e}");
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(Message {
-                        message: "Internal server error".to_string(),
-                    }),
-                )
+                INTERNAL_SERVER_ERROR_RESPONSE.into_response()
             })?;
 
         let env_script_path = format!("{runtime_dir}/env");
@@ -318,35 +256,20 @@ pub async fn install_runtime(
             .await
             .map_err(|e| {
                 eprintln!("Failed to write env script: {e}");
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(Message {
-                        message: "Internal server error".to_string(),
-                    }),
-                )
+                INTERNAL_SERVER_ERROR_RESPONSE.into_response()
             })?;
         fs::set_permissions(&env_script_path, Permissions::from_mode(0o755))
             .await
             .map_err(|e| {
                 eprintln!("Failed to set permissions on env script: {e}");
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(Message {
-                        message: "Internal server error".to_string(),
-                    }),
-                )
+                INTERNAL_SERVER_ERROR_RESPONSE.into_response()
             })?;
 
         fs::write(&(format!("{runtime_dir}/shell.nix")), &req.nix_shell)
             .await
             .map_err(|e| {
                 eprintln!("Failed to write shell.nix: {e}");
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(Message {
-                        message: "Internal server error".to_string(),
-                    }),
-                )
+                INTERNAL_SERVER_ERROR_RESPONSE.into_response()
             })?;
 
         let mut metadata_guard = metadata_cache.write().await;
@@ -365,66 +288,36 @@ pub async fn install_runtime(
     let mut wall_time: Option<u32> = None;
     let metadata_str = fs::read_to_string(metadata_file_path).await.map_err(|e| {
         eprintln!("Error reading metadata file: {e}");
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(Message {
-                message: "Internal server error".to_string(),
-            }),
-        )
+        INTERNAL_SERVER_ERROR_RESPONSE.into_response()
     })?;
     let metadata_lines = metadata_str.lines();
     for line in metadata_lines {
         let (key_res, value_res) = split_metadata_line(line);
         let key = key_res.map_err(|_| {
             eprintln!("Failed to parse metadata file, received: {line}");
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(Message {
-                    message: "Internal server error".to_string(),
-                }),
-            )
+            INTERNAL_SERVER_ERROR_RESPONSE.into_response()
         })?;
         let value = value_res.map_err(|_| {
             eprintln!("Failed to parse metadata file, received: {line}");
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(Message {
-                    message: "Internal server error".to_string(),
-                }),
-            )
+            INTERNAL_SERVER_ERROR_RESPONSE.into_response()
         })?;
         match key {
             "cgmem" => {
                 memory = Some(value.parse().map_err(|_| {
                     eprintln!("Failed to parse memory usage, received value: {value}");
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        Json(Message {
-                            message: "Internal server error".to_string(),
-                        }),
-                    )
+                    INTERNAL_SERVER_ERROR_RESPONSE.into_response()
                 })?)
             }
             "exitcode" => {
                 exit_code = Some(value.parse().map_err(|_| {
                     eprintln!("Failed to parse exit code, received value: {value}");
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        Json(Message {
-                            message: "Internal server error".to_string(),
-                        }),
-                    )
+                    INTERNAL_SERVER_ERROR_RESPONSE.into_response()
                 })?)
             }
             "exitsig" => {
                 exit_signal = Some(value.parse().map_err(|_| {
                     eprintln!("Failed to parse exit signal, received value: {value}");
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        Json(Message {
-                            message: "Internal server error".to_string(),
-                        }),
-                    )
+                    INTERNAL_SERVER_ERROR_RESPONSE.into_response()
                 })?)
             }
             "message" => exit_message = Some(value.to_string()),
@@ -432,23 +325,13 @@ pub async fn install_runtime(
             "time" => {
                 cpu_time = Some(value.parse().map_err(|_| {
                     eprintln!("Failed to parse cpu time, received value: {value}");
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        Json(Message {
-                            message: "Internal server error".to_string(),
-                        }),
-                    )
+                    INTERNAL_SERVER_ERROR_RESPONSE.into_response()
                 })?)
             }
             "time-wall" => {
                 wall_time = Some(value.parse().map_err(|_| {
                     eprintln!("Failed to parse wall time, received value: {value}");
-                    (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        Json(Message {
-                            message: "Internal server error".to_string(),
-                        }),
-                    )
+                    INTERNAL_SERVER_ERROR_RESPONSE.into_response()
                 })?)
             }
             _ => {}
@@ -466,5 +349,5 @@ pub async fn install_runtime(
         wall_time,
     };
 
-    Ok((StatusCode::OK, Json(result).into_response()))
+    Ok((StatusCode::OK, Json(result)).into_response())
 }
