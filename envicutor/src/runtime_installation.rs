@@ -54,7 +54,7 @@ fn split_metadata_line(line: &str) -> (Result<&str, ()>, Result<&str, ()>) {
     (key, value)
 }
 
-fn validate_request(req: &AddRuntimeRequest) -> Result<(), (StatusCode, impl IntoResponse)> {
+fn validate_request(req: &AddRuntimeRequest) -> Result<(), (StatusCode, Json<Message>)> {
     let bad_request_message = if req.name.is_empty() {
         "Name can't be empty"
     } else if req.nix_shell.is_empty() {
@@ -71,8 +71,7 @@ fn validate_request(req: &AddRuntimeRequest) -> Result<(), (StatusCode, impl Int
             StatusCode::BAD_REQUEST,
             Json(Message {
                 message: bad_request_message.to_string(),
-            })
-            .into_response(),
+            }),
         ))
     } else {
         Ok(())
