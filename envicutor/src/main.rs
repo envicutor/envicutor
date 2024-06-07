@@ -16,39 +16,35 @@ const DEFAULT_PORT: &str = "5000";
 fn get_limits_from_env_var(prefix: &str) -> MandatoryLimits {
     MandatoryLimits {
         wall_time: env::var(format!("{prefix}_WALL_TIME"))
-            .expect(&format!("Missing {prefix}_WALL_TIME environment variable"))
+            .unwrap_or_else(|_| panic!("Missing {prefix}_WALL_TIME environment variable"))
             .parse()
-            .expect(&format!("Invalid {prefix}_WALL_TIME")),
+            .unwrap_or_else(|_| panic!("Invalid {prefix}_WALL_TIME")),
         cpu_time: env::var(format!("{prefix}_CPU_TIME"))
-            .expect(&format!("Missing {prefix}_CPU_TIME environment variable"))
+            .unwrap_or_else(|_| panic!("Missing {prefix}_CPU_TIME environment variable"))
             .parse()
-            .expect(&format!("Invalid {prefix}_CPU_TIME")),
+            .unwrap_or_else(|_| panic!("Invalid {prefix}_CPU_TIME")),
         memory: env::var(format!("{prefix}_MEMORY"))
-            .expect(&format!("Missing {prefix}_MEMORY environment variable"))
+            .unwrap_or_else(|_| panic!("Missing {prefix}_MEMORY environment variable"))
             .parse()
-            .expect(&format!("Invalid {prefix}_MEMORY")),
+            .unwrap_or_else(|_| panic!("Invalid {prefix}_MEMORY")),
         extra_time: env::var(format!("{prefix}_EXTRA_TIME"))
-            .expect(&format!("Missing {prefix}_EXTRA_TIME environment variable"))
+            .unwrap_or_else(|_| panic!("Missing {prefix}_EXTRA_TIME environment variable"))
             .parse()
-            .expect(&format!("Invalid {prefix}_EXTRA_TIME")),
+            .unwrap_or_else(|_| panic!("Invalid {prefix}_EXTRA_TIME")),
         max_open_files: env::var(format!("{prefix}_MAX_OPEN_FILES"))
-            .expect(&format!(
-                "Missing {prefix}_MAX_OPEN_FILES environment variable"
-            ))
+            .unwrap_or_else(|_| panic!("Missing {prefix}_MAX_OPEN_FILES environment variable"))
             .parse()
-            .expect(&format!("Invalid {prefix}_MAX_OPEN_FILES")),
+            .unwrap_or_else(|_| panic!("Invalid {prefix}_MAX_OPEN_FILES")),
         max_file_size: env::var(format!("{prefix}_MAX_FILE_SIZE"))
-            .expect(&format!(
-                "Missing {prefix}_MAX_FILE_SIZE environment variable"
-            ))
+            .unwrap_or_else(|_| panic!("Missing {prefix}_MAX_FILE_SIZE environment variable"))
             .parse()
-            .expect(&format!("Invalid {prefix}_MAX_FILE_SIZE")),
+            .unwrap_or_else(|_| panic!("Invalid {prefix}_MAX_FILE_SIZE")),
         max_number_of_processes: env::var(format!("{prefix}_MAX_NUMBER_OF_PROCESSES"))
-            .expect(&format!(
-                "Missing {prefix}_MAX_NUMBER_OF_PROCESSES environment variable"
-            ))
+            .unwrap_or_else(|_| {
+                panic!("Missing {prefix}_MAX_NUMBER_OF_PROCESSES environment variable")
+            })
             .parse()
-            .expect(&format!("Invalid {prefix}_MAX_NUMBER_OF_PROCESSES")),
+            .unwrap_or_else(|_| panic!("Invalid {prefix}_MAX_NUMBER_OF_PROCESSES")),
     }
 }
 
