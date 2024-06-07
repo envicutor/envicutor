@@ -6,7 +6,7 @@ use std::{
 
 use axum::{routing::post, Router};
 use envicutor::{
-    install_packages::install_package,
+    runtime_installation::install_runtime,
     limits::{MandatoryLimits, SystemLimits},
 };
 use tokio::sync::{RwLock, Semaphore};
@@ -69,7 +69,7 @@ async fn main() {
             let box_id = box_id.clone();
             let metadata_cache = metadata_cache.clone();
             move |req| {
-                install_package(
+                install_runtime(
                     system_limits,
                     installation_semaphore,
                     box_id,

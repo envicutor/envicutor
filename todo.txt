@@ -1,4 +1,5 @@
 - Clean up tmp dir, isolate, rollback after errors (maybe by impl'ing drop)
+- nix shell needs to be accessible inside sandbox
 - Ensure runtime name does not exist
 - Load runtimes into cache on startup
 - Delete runtimes (maybe from database only)
@@ -6,7 +7,6 @@
 - Who provides files?
   - Provide main file name on server
   - Note: if you have multiple files then you are probably aware of the programming language being used
-- Use clippy
 - Nix runtimes will be inconsistent if we use non-deterministic nix channels and a worker gets added after a nix channel was updated
   - Disable nix channels
 

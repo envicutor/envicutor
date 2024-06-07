@@ -8,11 +8,8 @@ use std::{
     },
 };
 
+use crate::{limits::SystemLimits, requests::AddRuntimeRequest};
 use axum::{http::StatusCode, response::IntoResponse, Json};
-use crate::{
-    limits::SystemLimits,
-    requests::AddRuntimeRequest,
-};
 use rusqlite::Connection;
 use tokio::{
     fs,
@@ -20,7 +17,6 @@ use tokio::{
     sync::{RwLock, Semaphore},
     task,
 };
-
 
 const MAX_BOX_ID: u64 = 900;
 const METADATA_FILE_NAME: &str = "metadata.txt";
@@ -58,13 +54,7 @@ fn split_metadata_line(line: &str) -> (Result<&str, ()>, Result<&str, ()>) {
     (key, value)
 }
 
-pub async fn install_package(
-    system_limits: SystemLimits,
-    semaphore: Arc<Semaphore>,
-    box_id: Arc<AtomicU64>,
-    metadata_cache: Arc<RwLock<HashMap<u32, String>>>,
-    Json(req): Json<AddRuntimeRequest>,
-) -> Result<impl IntoResponse, (StatusCode, impl IntoResponse)> {
+fn validate_request(req: &AddRuntimeRequest) -> Result<(), (StatusCode, impl IntoResponse)> {
     let bad_request_message = if req.name.is_empty() {
         "Name can't be empty"
     } else if req.nix_shell.is_empty() {
@@ -77,14 +67,26 @@ pub async fn install_package(
         ""
     };
     if !bad_request_message.is_empty() {
-        return Ok((
+        Err((
             StatusCode::BAD_REQUEST,
             Json(Message {
                 message: bad_request_message.to_string(),
             })
             .into_response(),
-        ));
+        ))
+    } else {
+        Ok(())
     }
+}
+
+pub async fn install_runtime(
+    system_limits: SystemLimits,
+    semaphore: Arc<Semaphore>,
+    box_id: Arc<AtomicU64>,
+    metadata_cache: Arc<RwLock<HashMap<u32, String>>>,
+    Json(req): Json<AddRuntimeRequest>,
+) -> Result<impl IntoResponse, (StatusCode, impl IntoResponse)> {
+    validate_request(&req)?;
 
     let current_box_id = box_id.fetch_add(1, Ordering::SeqCst) % MAX_BOX_ID;
     Command::new("isolate")
