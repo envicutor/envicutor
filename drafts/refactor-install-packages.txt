@@ -1,0 +1,3 @@
+- Need to refactor install_packages
+  - Unclutter main.rs file
+  - Get rid of boilerplate

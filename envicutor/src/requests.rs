@@ -15,7 +15,7 @@ pub struct AddRuntimeRequest {
 
 impl AddRuntimeRequest {
     pub fn get_limits(&self, system_limits: &MandatoryLimits) -> Result<MandatoryLimits, String> {
-        let res = match &self.limits {
+        match &self.limits {
             Some(req_limits) => {
                 if let Some(wall_time) = req_limits.wall_time {
                     if wall_time > system_limits.wall_time {
@@ -90,7 +90,6 @@ impl AddRuntimeRequest {
                 })
             }
             None => Ok(system_limits.clone()),
-        };
-        res
+        }
     }
 }
