@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     env,
     fs::Permissions,
     os::unix::fs::PermissionsExt,
@@ -14,7 +15,12 @@ use envicutor::{
     requests::AddRuntimeRequest,
 };
 use rusqlite::Connection;
-use tokio::{fs, process::Command, sync::Semaphore, task};
+use tokio::{
+    fs,
+    process::Command,
+    sync::{RwLock, Semaphore},
+    task,
+};
 
 const MAX_BOX_ID: u64 = 900;
 const DEFAULT_PORT: &str = "5000";
@@ -26,10 +32,24 @@ struct Message {
     message: String,
 }
 
+#[derive(serde::Serialize)]
+struct StageResult {
+    memory: Option<u32>,
+    exit_code: Option<u32>,
+    exit_signal: Option<u32>,
+    exit_message: Option<String>,
+    exit_status: Option<String>,
+    stdout: String,
+    stderr: String,
+    cpu_time: Option<u32>,
+    wall_time: Option<u32>,
+}
+
 async fn install_package(
     system_limits: SystemLimits,
     semaphore: Arc<Semaphore>,
     box_id: Arc<AtomicU64>,
+    metadata_cache: Arc<RwLock<HashMap<u32, String>>>,
     Json(req): Json<AddRuntimeRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, impl IntoResponse)> {
     let bad_request_message = if req.name.is_empty() {
@@ -152,7 +172,7 @@ async fn install_package(
         })?;
 
     if cmd_res.status.success() {
-        let runtime_name = req.name;
+        let runtime_name = req.name.clone();
         let source_file_name = req.source_file_name;
 
         let runtime_id: u32 = task::spawn_blocking(move || {
@@ -314,13 +334,139 @@ async fn install_package(
                     }),
                 )
             })?;
+
+        let mut metadata_guard = metadata_cache.write().await;
+        metadata_guard.insert(runtime_id, req.name);
+        drop(metadata_guard);
     }
-    /*
-    - metadata_cache.set(runtime_id, {name: req.name})
-    */
 
     drop(permit);
-    Ok((StatusCode::OK, ().into_response()))
+
+    let mut memory: Option<u32> = None;
+    let mut exit_code: Option<u32> = None;
+    let mut exit_signal: Option<u32> = None;
+    let mut exit_message: Option<String> = None;
+    let mut exit_status: Option<String> = None;
+    let mut cpu_time: Option<u32> = None;
+    let mut wall_time: Option<u32> = None;
+    let metadata_str = fs::read_to_string(metadata_file_path).await.map_err(|e| {
+        eprintln!("Error reading metadata file: {e}");
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(Message {
+                message: "Internal server error".to_string(),
+            }),
+        )
+    })?;
+    let metadata_lines = metadata_str.lines();
+    for line in metadata_lines {
+        let (key_res, value_res) = split_metadata_line(line);
+        let key = key_res.map_err(|_| {
+            eprintln!("Failed to parse metadata file, received: {line}");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(Message {
+                    message: "Internal server error".to_string(),
+                }),
+            )
+        })?;
+        let value = value_res.map_err(|_| {
+            eprintln!("Failed to parse metadata file, received: {line}");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(Message {
+                    message: "Internal server error".to_string(),
+                }),
+            )
+        })?;
+        match key {
+            "cgmem" => {
+                memory = Some(value.parse().map_err(|_| {
+                    eprintln!("Failed to parse memory usage, received value: {value}");
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(Message {
+                            message: "Internal server error".to_string(),
+                        }),
+                    )
+                })?)
+            }
+            "exitcode" => {
+                exit_code = Some(value.parse().map_err(|_| {
+                    eprintln!("Failed to parse exit code, received value: {value}");
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(Message {
+                            message: "Internal server error".to_string(),
+                        }),
+                    )
+                })?)
+            }
+            "exitsig" => {
+                exit_signal = Some(value.parse().map_err(|_| {
+                    eprintln!("Failed to parse exit signal, received value: {value}");
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(Message {
+                            message: "Internal server error".to_string(),
+                        }),
+                    )
+                })?)
+            }
+            "message" => exit_message = Some(value.to_string()),
+            "status" => exit_status = Some(value.to_string()),
+            "time" => {
+                cpu_time = Some(value.parse().map_err(|_| {
+                    eprintln!("Failed to parse cpu time, received value: {value}");
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(Message {
+                            message: "Internal server error".to_string(),
+                        }),
+                    )
+                })?)
+            }
+            "time-wall" => {
+                wall_time = Some(value.parse().map_err(|_| {
+                    eprintln!("Failed to parse wall time, received value: {value}");
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(Message {
+                            message: "Internal server error".to_string(),
+                        }),
+                    )
+                })?)
+            }
+            _ => {}
+        }
+    }
+    let result = StageResult {
+        cpu_time,
+        exit_code,
+        exit_message,
+        exit_signal,
+        exit_status,
+        memory,
+        stderr: String::from_utf8_lossy(&cmd_res.stderr).to_string(),
+        stdout: String::from_utf8_lossy(&cmd_res.stdout).to_string(),
+        wall_time,
+    };
+
+    Ok((StatusCode::OK, Json(result).into_response()))
+}
+
+fn split_metadata_line(line: &str) -> (Result<&str, ()>, Result<&str, ()>) {
+    let mut entry: Vec<&str> = line.split(":").collect();
+    let value = match entry.pop() {
+        Some(e) => Ok(e),
+        None => Err(()),
+    };
+    let key = match entry.pop() {
+        Some(e) => Ok(e),
+        None => Err(()),
+    };
+
+    (key, value)
 }
 
 fn get_limits_from_env_var(prefix: &str) -> MandatoryLimits {
@@ -374,13 +520,23 @@ async fn main() {
     // Currently we only allow one package installation at a time to avoid concurrency issues with Nix and SQLite
     let installation_semaphore = Arc::new(Semaphore::new(1));
     let box_id = Arc::new(AtomicU64::new(0));
+    let metadata_cache = Arc::new(RwLock::new(HashMap::new()));
     let app = Router::new().route(
         "/install",
         post({
             let system_limits = system_limits.clone();
             let installation_semaphore = installation_semaphore.clone();
             let box_id = box_id.clone();
-            move |req| install_package(system_limits, installation_semaphore, box_id, req)
+            let metadata_cache = metadata_cache.clone();
+            move |req| {
+                install_package(
+                    system_limits,
+                    installation_semaphore,
+                    box_id,
+                    metadata_cache,
+                    req,
+                )
+            }
         }),
     );
 

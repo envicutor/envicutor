@@ -1,4 +1,4 @@
-- Clean up isolate, rollback after errors
+- Clean up tmp dir, isolate, rollback after errors (maybe by impl'ing drop)
 - Ensure runtime name does not exist
 - Load runtimes into cache on startup
 - Delete runtimes (maybe from database only)
