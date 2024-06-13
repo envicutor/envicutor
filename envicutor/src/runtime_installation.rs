@@ -8,7 +8,7 @@ use std::{
     },
 };
 
-use crate::{limits::SystemLimits, requests::AddRuntimeRequest};
+use crate::limits::{GetLimits, Limits, SystemLimits};
 use axum::{
     body::Body,
     http::StatusCode,
@@ -16,6 +16,7 @@ use axum::{
     Json,
 };
 use rusqlite::Connection;
+use serde::Deserialize;
 use tokio::{
     fs,
     process::Command,
@@ -48,6 +49,17 @@ struct StageResult {
     stderr: String,
     cpu_time: Option<u32>,
     wall_time: Option<u32>,
+}
+
+#[derive(Deserialize)]
+pub struct AddRuntimeRequest {
+    pub name: String,
+    pub description: String,
+    pub nix_shell: String,
+    pub compile_script: String,
+    pub run_script: String,
+    pub source_file_name: String,
+    limits: Option<Limits>,
 }
 
 fn split_metadata_line(line: &str) -> (Result<&str, ()>, Result<&str, ()>) {
@@ -137,7 +149,8 @@ pub async fn install_runtime(
 
     let metadata_file_path = format!("{workdir}/{METADATA_FILE_NAME}");
     let limits = req
-        .get_limits(&system_limits.installation)
+        .limits
+        .get(&system_limits.installation)
         .map_err(|message| (StatusCode::BAD_REQUEST, Json(Message { message })).into_response())?;
 
     let permit = semaphore.acquire().await.map_err(|e| {

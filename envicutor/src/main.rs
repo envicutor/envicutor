@@ -57,7 +57,7 @@ fn check_and_get_system_limits() -> SystemLimits {
 #[tokio::main]
 async fn main() {
     let system_limits = check_and_get_system_limits();
-    // Currently we only allow one package installation at a time to avoid concurrency issues with Nix and SQLite
+    // Currently we only allow one runtime installation at a time to avoid concurrency issues with Nix and SQLite
     let installation_semaphore = Arc::new(Semaphore::new(1));
     let box_id = Arc::new(AtomicU64::new(0));
     let metadata_cache = Arc::new(RwLock::new(HashMap::new()));
