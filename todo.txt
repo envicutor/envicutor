@@ -1,5 +1,6 @@
 - Clean up tmp dir, isolate, rollback after errors (maybe by impl'ing drop)
-- nix shell needs to be accessible inside sandbox
+- nix-shell command needs to be accessible inside sandbox
+- Test
 - Ensure runtime name does not exist
 - Load runtimes into cache on startup
 - Delete runtimes (maybe from database only)
