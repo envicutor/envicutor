@@ -118,7 +118,7 @@ pub async fn install_runtime(
         .get(&system_limits.installation)
         .map_err(|message| (StatusCode::BAD_REQUEST, Json(Message { message })).into_response())?;
 
-    let permit = semaphore.acquire().await.map_err(|e| {
+    let _permit = semaphore.acquire().await.map_err(|e| {
         eprintln!("Failed to acquire semaphore: {e}");
         INTERNAL_SERVER_ERROR_RESPONSE.into_response()
     })?;
@@ -171,61 +171,50 @@ pub async fn install_runtime(
         })??;
 
         let runtime_dir = format!("/envicutor/runtimes/{runtime_id}");
-        // Consider abstracting if more duplications of exists+remove+create arise
-        if let Ok(true) = fs::try_exists(&runtime_dir).await {
-            fs::remove_dir_all(&runtime_dir).await.map_err(|e| {
-                eprintln!("Failed to remove: {runtime_dir}, error: {e}");
+        crate::fs::create_dir_replacing_existing(&runtime_dir)
+            .await
+            .map_err(|e| {
+                eprintln!("Failed to create: {runtime_dir}, error: {e}");
                 INTERNAL_SERVER_ERROR_RESPONSE.into_response()
             })?;
-        }
-        fs::create_dir(&runtime_dir).await.map_err(|e| {
-            eprintln!("Failed to create: {runtime_dir}, error: {e}");
-            INTERNAL_SERVER_ERROR_RESPONSE.into_response()
-        })?;
 
         if !req.compile_script.is_empty() {
             let compile_script_path = format!("{runtime_dir}/compile");
-            fs::write(&compile_script_path, req.compile_script)
-                .await
-                .map_err(|e| {
-                    eprintln!("Failed to write compile script: {e}");
-                    INTERNAL_SERVER_ERROR_RESPONSE.into_response()
-                })?;
-            fs::set_permissions(&compile_script_path, Permissions::from_mode(0o755))
-                .await
-                .map_err(|e| {
-                    eprintln!("Failed to set permissions on compile script: {e}");
-                    INTERNAL_SERVER_ERROR_RESPONSE.into_response()
-                })?;
+            crate::fs::write_file_and_set_permissions(
+                &compile_script_path,
+                &req.compile_script,
+                Permissions::from_mode(0o755),
+            )
+            .await
+            .map_err(|e| {
+                eprintln!("Failed to write compile script: {e}");
+                INTERNAL_SERVER_ERROR_RESPONSE.into_response()
+            })?;
         }
 
         let run_script_path = format!("{runtime_dir}/run");
-        fs::write(&run_script_path, &req.run_script)
-            .await
-            .map_err(|e| {
-                eprintln!("Failed to write run script: {e}");
-                INTERNAL_SERVER_ERROR_RESPONSE.into_response()
-            })?;
-        fs::set_permissions(&run_script_path, Permissions::from_mode(0o755))
-            .await
-            .map_err(|e| {
-                eprintln!("Failed to set permissions on run script: {e}");
-                INTERNAL_SERVER_ERROR_RESPONSE.into_response()
-            })?;
+        crate::fs::write_file_and_set_permissions(
+            &run_script_path,
+            &req.run_script,
+            Permissions::from_mode(0o755),
+        )
+        .await
+        .map_err(|e| {
+            eprintln!("Failed to write run script: {e}");
+            INTERNAL_SERVER_ERROR_RESPONSE.into_response()
+        })?;
 
         let env_script_path = format!("{runtime_dir}/env");
-        fs::write(&env_script_path, &result.stdout)
-            .await
-            .map_err(|e| {
-                eprintln!("Failed to write env script: {e}");
-                INTERNAL_SERVER_ERROR_RESPONSE.into_response()
-            })?;
-        fs::set_permissions(&env_script_path, Permissions::from_mode(0o755))
-            .await
-            .map_err(|e| {
-                eprintln!("Failed to set permissions on env script: {e}");
-                INTERNAL_SERVER_ERROR_RESPONSE.into_response()
-            })?;
+        crate::fs::write_file_and_set_permissions(
+            &env_script_path,
+            &result.stdout,
+            Permissions::from_mode(0o755),
+        )
+        .await
+        .map_err(|e| {
+            eprintln!("Failed to write env script: {e}");
+            INTERNAL_SERVER_ERROR_RESPONSE.into_response()
+        })?;
 
         fs::write(&(format!("{runtime_dir}/shell.nix")), &req.nix_shell)
             .await
@@ -236,10 +225,7 @@ pub async fn install_runtime(
 
         let mut metadata_guard = metadata_cache.write().await;
         metadata_guard.insert(runtime_id, req.name);
-        drop(metadata_guard);
     }
-
-    drop(permit);
 
     Ok((StatusCode::OK, Json(result)).into_response())
 }
