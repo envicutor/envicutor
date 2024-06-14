@@ -1,4 +1,0 @@
-- Need to refactor install_packages
-  - Get rid of boilerplate
-  - Drop-implementing structs for isolate, file
-  - Custom transaction?

@@ -1,32 +1,8 @@
 use core::fmt;
 
-use tokio::process::Command;
+use tokio::{fs, process::Command};
 
 use crate::limits::MandatoryLimits;
-
-/*
-- Should the temp directory be created in that struct?
-    - There shouldn't be a temp directory in the run stage
-    - Just have another struct called TempDir or something that creates a temporary directory with a random name
-Isolate {
-    box_id
-}
-
-static init() {
-    isolate --init --cg -b{box_id}
-}
-
-run(command, limits, mounts) {
-    - Return cmd res, metadata
-}
-
-drop() {
-    isolate --cleanup --cg -b{box_id}
-}
-
-Mount {
-}
-*/
 
 pub struct Mount {
     dir: String,
@@ -42,10 +18,37 @@ pub struct IsolateError {
     message: String,
 }
 
+#[derive(serde::Serialize)]
+pub struct StageResult {
+    memory: Option<u32>,
+    exit_code: Option<u32>,
+    exit_signal: Option<u32>,
+    exit_message: Option<String>,
+    exit_status: Option<String>,
+    stdout: String,
+    stderr: String,
+    cpu_time: Option<u32>,
+    wall_time: Option<u32>,
+}
+
 impl fmt::Display for IsolateError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.message)
     }
+}
+
+fn split_metadata_line(line: &str) -> (Result<&str, ()>, Result<&str, ()>) {
+    let mut entry: Vec<&str> = line.split(':').collect();
+    let value = match entry.pop() {
+        Some(e) => Ok(e),
+        None => Err(()),
+    };
+    let key = match entry.pop() {
+        Some(e) => Ok(e),
+        None => Err(()),
+    };
+
+    (key, value)
 }
 
 impl Isolate {
@@ -55,7 +58,7 @@ impl Isolate {
             .output()
             .await
             .map_err(|e| IsolateError {
-                message: format!("Failed to run `isolate --init`\nError: {e}"),
+                message: format!("Failed to get `isolate --init` output\nError: {e}"),
             })?;
         if !res.status.success() {
             return Err(IsolateError {
@@ -76,13 +79,14 @@ impl Isolate {
         })
     }
 
-    /*
-    run
-    - isolate --run
-    */
-    pub async fn run(&self, mounts: &[Mount], limits: &MandatoryLimits, cmd_args: &[String]) {
-        let cmd = Command::new("isolate")
-            .arg("--run")
+    pub async fn run(
+        &self,
+        mounts: &[Mount],
+        limits: &MandatoryLimits,
+        cmd_args: &[String],
+    ) -> Result<StageResult, IsolateError> {
+        let mut cmd = Command::new("isolate");
+        cmd.arg("--run")
             .arg(&format!("--meta={}", self.metadata_file_path))
             .arg("--cg");
 
@@ -101,13 +105,86 @@ impl Isolate {
             .arg("--")
             .args(cmd_args);
 
-        let cmd_res = cmd
-            .output()
+        let cmd_res = cmd.output().await.map_err(|e| IsolateError {
+            message: format!("Failed to get `isolate --run` output\nError: {e}"),
+        })?;
+
+        let mut memory: Option<u32> = None;
+        let mut exit_code: Option<u32> = None;
+        let mut exit_signal: Option<u32> = None;
+        let mut exit_message: Option<String> = None;
+        let mut exit_status: Option<String> = None;
+        let mut cpu_time: Option<u32> = None;
+        let mut wall_time: Option<u32> = None;
+
+        let metadata_str = fs::read_to_string(&self.metadata_file_path)
             .await
-            .map_err(|e| {
-                eprintln!("Failed to run isolate command: {e}");
-                INTERNAL_SERVER_ERROR_RESPONSE.into_response()
+            .map_err(|e| IsolateError {
+                message: format!("Error reading metadata file: {e}"),
             })?;
+        let metadata_lines = metadata_str.lines();
+        for line in metadata_lines {
+            let (key_res, value_res) = split_metadata_line(line);
+            let key = key_res.map_err(|_| IsolateError {
+                message: format!("Failed to parse metadata file, received: {line}"),
+            })?;
+            let value = value_res.map_err(|_| IsolateError {
+                message: format!("Failed to parse metadata file, received: {line}"),
+            })?;
+            match key {
+                "cgmem" => {
+                    memory = Some(value.parse().map_err(|_| IsolateError {
+                        message: format!("Failed to parse memory usage, received value: {value}"),
+                    })?)
+                }
+                "exitcode" => {
+                    exit_code = Some(value.parse().map_err(|_| IsolateError {
+                        message: format!("Failed to parse exit code, received value: {value}"),
+                    })?)
+                }
+                "exitsig" => {
+                    exit_signal = Some(value.parse().map_err(|_| IsolateError {
+                        message: format!("Failed to parse exit signal, received value: {value}"),
+                    })?)
+                }
+                "message" => exit_message = Some(value.to_string()),
+                "status" => exit_status = Some(value.to_string()),
+                "time" => {
+                    cpu_time = Some(value.parse().map_err(|_| IsolateError {
+                        message: format!("Failed to parse cpu time, received value: {value}"),
+                    })?)
+                }
+                "time-wall" => {
+                    wall_time = Some(value.parse().map_err(|_| IsolateError {
+                        message: format!("Failed to parse wall time, received value: {value}"),
+                    })?)
+                }
+                _ => {}
+            }
+        }
+
+        // Might be an error in the actual isolate command
+        if !cmd_res.status.success() && exit_code.is_none() {
+            return Err(IsolateError {
+                message: format!(
+                    "isolate --run exited with error code but exit code was not found in metadata"
+                ),
+            });
+        }
+
+        let result = StageResult {
+            cpu_time,
+            exit_code,
+            exit_message,
+            exit_signal,
+            exit_status,
+            memory,
+            stderr: String::from_utf8_lossy(&cmd_res.stderr).to_string(),
+            stdout: String::from_utf8_lossy(&cmd_res.stdout).to_string(),
+            wall_time,
+        };
+
+        Ok(result)
     }
 }
 

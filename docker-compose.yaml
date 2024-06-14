@@ -11,7 +11,6 @@ services:
       - ./envicutor/test:/submission
       - nix:/nix
     privileged: true
-    cgroup: host
     ports:
       - '5000:5000'
     environment:

@@ -38,19 +38,6 @@ pub struct StaticMessage {
     message: &'static str,
 }
 
-#[derive(serde::Serialize)]
-struct StageResult {
-    memory: Option<u32>,
-    exit_code: Option<u32>,
-    exit_signal: Option<u32>,
-    exit_message: Option<String>,
-    exit_status: Option<String>,
-    stdout: String,
-    stderr: String,
-    cpu_time: Option<u32>,
-    wall_time: Option<u32>,
-}
-
 #[derive(Deserialize)]
 pub struct AddRuntimeRequest {
     pub name: String,
@@ -139,6 +126,7 @@ pub async fn install_runtime(
         INTERNAL_SERVER_ERROR_RESPONSE.into_response()
     })?;
 
+    // FIXME: don't create intermediate 'box', we don't have metadata file now?
     let nix_shell_path = format!("{workdir}/box/shell.nix");
     fs::write(&nix_shell_path, &req.nix_shell)
         .await
