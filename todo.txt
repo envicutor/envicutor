@@ -4,7 +4,6 @@
 - Load runtimes into cache on startup
 - Delete runtimes (maybe from database only)
 - Make installation acquire normal semaphore as well (and add the reasoning to presentation)
-- Ensure all boxes are cleaned on startup?
 - Who provides files?
   - Provide main file name on server
   - Note: if you have multiple files then you are probably aware of the programming language being used

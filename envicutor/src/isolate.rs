@@ -1,40 +1,24 @@
-use core::fmt;
-
+use anyhow::{anyhow, Error};
 use tokio::{fs, process::Command};
 
 use crate::limits::MandatoryLimits;
 
-pub struct Mount {
-    dir: String,
-}
-
 pub struct Isolate {
-    box_id: u32,
-    box_dir: String,
+    box_id: u64,
     metadata_file_path: String,
-}
-
-pub struct IsolateError {
-    message: String,
 }
 
 #[derive(serde::Serialize)]
 pub struct StageResult {
-    memory: Option<u32>,
-    exit_code: Option<u32>,
-    exit_signal: Option<u32>,
-    exit_message: Option<String>,
-    exit_status: Option<String>,
-    stdout: String,
-    stderr: String,
-    cpu_time: Option<u32>,
-    wall_time: Option<u32>,
-}
-
-impl fmt::Display for IsolateError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.message)
-    }
+    pub memory: Option<u32>,
+    pub exit_code: Option<u32>,
+    pub exit_signal: Option<u32>,
+    pub exit_message: Option<String>,
+    pub exit_status: Option<String>,
+    pub stdout: String,
+    pub stderr: String,
+    pub cpu_time: Option<u32>,
+    pub wall_time: Option<u32>,
 }
 
 fn split_metadata_line(line: &str) -> (Result<&str, ()>, Result<&str, ()>) {
@@ -52,46 +36,41 @@ fn split_metadata_line(line: &str) -> (Result<&str, ()>, Result<&str, ()>) {
 }
 
 impl Isolate {
-    pub async fn init(box_id: u32) -> Result<Isolate, IsolateError> {
+    pub async fn init(box_id: u64) -> Result<Isolate, Error> {
         let res = Command::new("isolate")
             .args(["--init", "--cg", &format!("-b{}", box_id)])
             .output()
             .await
-            .map_err(|e| IsolateError {
-                message: format!("Failed to get `isolate --init` output\nError: {e}"),
-            })?;
+            .map_err(|e| anyhow!("Failed to get `isolate --init` output\nError: {e}"))?;
         if !res.status.success() {
-            return Err(IsolateError {
-                message: format!(
-                    "`isolate --init` failed with\nstderr: {}\nstdout: {}",
-                    String::from_utf8_lossy(&res.stderr),
-                    String::from_utf8_lossy(&res.stdout)
-                ),
-            });
+            return Err(anyhow!(
+                "`isolate --init` failed with\nstderr: {}\nstdout: {}",
+                String::from_utf8_lossy(&res.stderr),
+                String::from_utf8_lossy(&res.stdout),
+            ));
         }
 
         let box_dir = String::from_utf8_lossy(&res.stdout).trim().to_string();
         let metadata_file_path = format!("{box_dir}/metadata.txt");
         Ok(Isolate {
             box_id,
-            box_dir: String::from_utf8_lossy(&res.stdout).trim().to_string(),
             metadata_file_path,
         })
     }
 
     pub async fn run(
         &self,
-        mounts: &[Mount],
+        mounts: &[&str],
         limits: &MandatoryLimits,
         cmd_args: &[String],
-    ) -> Result<StageResult, IsolateError> {
+    ) -> Result<StageResult, Error> {
         let mut cmd = Command::new("isolate");
         cmd.arg("--run")
             .arg(&format!("--meta={}", self.metadata_file_path))
             .arg("--cg");
 
-        for mount in mounts {
-            cmd.arg(format!("--dir={}", mount.dir));
+        for dir in mounts {
+            cmd.arg(format!("--dir={}", dir));
         }
 
         cmd.arg(format!("--cg-mem={}", limits.memory))
@@ -105,9 +84,10 @@ impl Isolate {
             .arg("--")
             .args(cmd_args);
 
-        let cmd_res = cmd.output().await.map_err(|e| IsolateError {
-            message: format!("Failed to get `isolate --run` output\nError: {e}"),
-        })?;
+        let cmd_res = cmd
+            .output()
+            .await
+            .map_err(|e| anyhow!("Failed to get `isolate --run` output\nError: {e}"))?;
 
         let mut memory: Option<u32> = None;
         let mut exit_code: Option<u32> = None;
@@ -119,44 +99,40 @@ impl Isolate {
 
         let metadata_str = fs::read_to_string(&self.metadata_file_path)
             .await
-            .map_err(|e| IsolateError {
-                message: format!("Error reading metadata file: {e}"),
-            })?;
+            .map_err(|e| anyhow!("Error reading metadata file: {e}"))?;
         let metadata_lines = metadata_str.lines();
         for line in metadata_lines {
             let (key_res, value_res) = split_metadata_line(line);
-            let key = key_res.map_err(|_| IsolateError {
-                message: format!("Failed to parse metadata file, received: {line}"),
-            })?;
-            let value = value_res.map_err(|_| IsolateError {
-                message: format!("Failed to parse metadata file, received: {line}"),
-            })?;
+            let key =
+                key_res.map_err(|_| anyhow!("Failed to parse metadata file, received: {line}"))?;
+            let value = value_res
+                .map_err(|_| anyhow!("Failed to parse metadata file, received: {line}"))?;
             match key {
                 "cgmem" => {
-                    memory = Some(value.parse().map_err(|_| IsolateError {
-                        message: format!("Failed to parse memory usage, received value: {value}"),
+                    memory = Some(value.parse().map_err(|_| {
+                        anyhow!("Failed to parse memory usage, received value: {value}")
                     })?)
                 }
                 "exitcode" => {
-                    exit_code = Some(value.parse().map_err(|_| IsolateError {
-                        message: format!("Failed to parse exit code, received value: {value}"),
+                    exit_code = Some(value.parse().map_err(|_| {
+                        anyhow!("Failed to parse exit code, received value: {value}")
                     })?)
                 }
                 "exitsig" => {
-                    exit_signal = Some(value.parse().map_err(|_| IsolateError {
-                        message: format!("Failed to parse exit signal, received value: {value}"),
+                    exit_signal = Some(value.parse().map_err(|_| {
+                        anyhow!("Failed to parse exit signal, received value: {value}")
                     })?)
                 }
                 "message" => exit_message = Some(value.to_string()),
                 "status" => exit_status = Some(value.to_string()),
                 "time" => {
-                    cpu_time = Some(value.parse().map_err(|_| IsolateError {
-                        message: format!("Failed to parse cpu time, received value: {value}"),
+                    cpu_time = Some(value.parse().map_err(|_| {
+                        anyhow!("Failed to parse cpu time, received value: {value}")
                     })?)
                 }
                 "time-wall" => {
-                    wall_time = Some(value.parse().map_err(|_| IsolateError {
-                        message: format!("Failed to parse wall time, received value: {value}"),
+                    wall_time = Some(value.parse().map_err(|_| {
+                        anyhow!("Failed to parse wall time, received value: {value}")
                     })?)
                 }
                 _ => {}
@@ -165,11 +141,9 @@ impl Isolate {
 
         // Might be an error in the actual isolate command
         if !cmd_res.status.success() && exit_code.is_none() {
-            return Err(IsolateError {
-                message: format!(
-                    "isolate --run exited with error code but exit code was not found in metadata"
-                ),
-            });
+            return Err(anyhow!(
+                "isolate --run exited with error code but exit code was not found in metadata"
+            ));
         }
 
         let result = StageResult {
