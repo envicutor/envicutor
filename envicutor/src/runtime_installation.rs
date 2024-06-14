@@ -9,9 +9,11 @@ use std::{
 };
 
 use crate::{
+    globals::DB_PATH,
     isolate::Isolate,
     limits::{GetLimits, Limits, SystemLimits},
     temp_dir::TempDir,
+    transaction::Transaction,
 };
 use axum::{
     body::Body,
@@ -28,7 +30,6 @@ use tokio::{
 };
 
 const MAX_BOX_ID: u64 = 2147483647;
-const DB_PATH: &str = "/envicutor/runtimes/db.sql";
 
 #[derive(serde::Serialize)]
 struct Message {
@@ -92,6 +93,7 @@ pub async fn install_runtime(
 ) -> Result<Response<Body>, Response<Body>> {
     validate_request(&req)?;
 
+    // TODO: abstract modulo logic
     let current_box_id = box_id.fetch_add(1, Ordering::SeqCst) % MAX_BOX_ID;
     let isolate = Isolate::init(current_box_id).await.map_err(|e| {
         eprintln!("Failed to initialize isolate: {e}");
@@ -139,7 +141,7 @@ pub async fn install_runtime(
         let runtime_name = req.name.clone();
         let source_file_name = req.source_file_name;
 
-        let runtime_id: u32 = task::spawn_blocking(move || {
+        let (runtime_id, _trx) = task::spawn_blocking(move || {
             let connection = Connection::open(DB_PATH).map_err(|e| {
                 eprintln!("Failed to open SQLite connection: {e}");
                 INTERNAL_SERVER_ERROR_RESPONSE.into_response()
@@ -148,12 +150,23 @@ pub async fn install_runtime(
             connection
                 .execute(
                     "INSERT INTO runtime (name, source_file_name) VALUES (?, ?)",
-                    (runtime_name, source_file_name),
+                    (&runtime_name, source_file_name),
                 )
                 .map_err(|e| {
                     eprintln!("Failed to execute statement: {e}");
                     INTERNAL_SERVER_ERROR_RESPONSE.into_response()
                 })?;
+
+            let trx = Transaction {
+                rollback_fn: move |conn| {
+                    let res = conn.execute("DELETE FROM runtime WHERE name = ?", [&runtime_name]);
+                    if let Err(e) = res {
+                        eprintln!(
+                            "Failed to remove runtime with name: {runtime_name} during rollback\nError: {e}"
+                        );
+                    }
+                },
+            };
 
             let row_id = connection
                 .query_row("SELECT last_insert_rowid()", (), |row| row.get(0))
@@ -162,7 +175,7 @@ pub async fn install_runtime(
                     INTERNAL_SERVER_ERROR_RESPONSE.into_response()
                 })?;
 
-            Ok::<u32, Response<Body>>(row_id)
+            Ok((row_id, trx))
         })
         .await
         .map_err(|e| {
