@@ -1,24 +1,27 @@
 use anyhow::{anyhow, Error};
 use tokio::{fs, process::Command};
 
-use crate::limits::MandatoryLimits;
+use crate::{
+    limits::MandatoryLimits,
+    temp_dir::TempDir,
+    units::{Kilobytes, Seconds},
+};
 
 pub struct Isolate {
     box_id: u64,
-    metadata_file_path: String,
 }
 
 #[derive(serde::Serialize)]
 pub struct StageResult {
-    pub memory: Option<u32>,
+    pub memory: Option<Kilobytes>,
     pub exit_code: Option<u32>,
     pub exit_signal: Option<u32>,
     pub exit_message: Option<String>,
     pub exit_status: Option<String>,
     pub stdout: String,
     pub stderr: String,
-    pub cpu_time: Option<u32>,
-    pub wall_time: Option<u32>,
+    pub cpu_time: Option<Seconds>,
+    pub wall_time: Option<Seconds>,
 }
 
 fn split_metadata_line(line: &str) -> (Result<&str, ()>, Result<&str, ()>) {
@@ -50,23 +53,29 @@ impl Isolate {
             ));
         }
 
-        let box_dir = String::from_utf8_lossy(&res.stdout).trim().to_string();
-        let metadata_file_path = format!("{box_dir}/metadata.txt");
-        Ok(Isolate {
-            box_id,
-            metadata_file_path,
-        })
+        Ok(Isolate { box_id })
     }
 
     pub async fn run(
         &self,
-        mounts: &[&str],
+        mounts: &[String],
         limits: &MandatoryLimits,
         cmd_args: &[String],
     ) -> Result<StageResult, Error> {
+        let metadata_dir = TempDir::new(format!("/tmp/{}-metadata", self.box_id))
+            .await
+            .map_err(|e| {
+                anyhow!(
+                    "Failed to create metadata temp directory at /tmp/{}-metadata\nError: {}",
+                    self.box_id,
+                    e
+                )
+            })?;
+
+        let metadata_file_path = format!("{}/metadata.txt", metadata_dir.path);
         let mut cmd = Command::new("isolate");
         cmd.arg("--run")
-            .arg(&format!("--meta={}", self.metadata_file_path))
+            .arg(&format!("--meta={}", metadata_file_path))
             .arg("--cg");
 
         for dir in mounts {
@@ -89,17 +98,27 @@ impl Isolate {
             .await
             .map_err(|e| anyhow!("Failed to get `isolate --run` output\nError: {e}"))?;
 
-        let mut memory: Option<u32> = None;
+        let mut memory: Option<Kilobytes> = None;
         let mut exit_code: Option<u32> = None;
         let mut exit_signal: Option<u32> = None;
         let mut exit_message: Option<String> = None;
         let mut exit_status: Option<String> = None;
-        let mut cpu_time: Option<u32> = None;
-        let mut wall_time: Option<u32> = None;
+        let mut cpu_time: Option<Seconds> = None;
+        let mut wall_time: Option<Seconds> = None;
+        let stdout = String::from_utf8_lossy(&cmd_res.stdout).to_string();
+        let stderr = String::from_utf8_lossy(&cmd_res.stderr).to_string();
 
-        let metadata_str = fs::read_to_string(&self.metadata_file_path)
+        let metadata_str = fs::read_to_string(&metadata_file_path)
             .await
-            .map_err(|e| anyhow!("Error reading metadata file: {e}"))?;
+            .map_err(|e| {
+                anyhow!(
+                    "Error reading metadata file: {}\nError: {}\nIsolate run stdout: {}\nIsolate run stderr: {}",
+                    metadata_file_path,
+                    e,
+                    stdout,
+                    stderr
+                )
+            })?;
         let metadata_lines = metadata_str.lines();
         for line in metadata_lines {
             let (key_res, value_res) = split_metadata_line(line);
@@ -142,10 +161,11 @@ impl Isolate {
         // Might be an error in the actual isolate command
         if !cmd_res.status.success() && exit_code.is_none() {
             return Err(anyhow!(
-                "isolate --run exited with error code but exit code was not found in metadata"
+                "isolate --run exited with error code but exit code was not found in metadata\nstdout: {}\nstderr: {}",
+                stdout,
+                stderr
             ));
         }
-
         let result = StageResult {
             cpu_time,
             exit_code,
@@ -153,8 +173,8 @@ impl Isolate {
             exit_signal,
             exit_status,
             memory,
-            stderr: String::from_utf8_lossy(&cmd_res.stderr).to_string(),
-            stdout: String::from_utf8_lossy(&cmd_res.stdout).to_string(),
+            stderr,
+            stdout,
             wall_time,
         };
 

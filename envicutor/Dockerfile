@@ -27,7 +27,7 @@ COPY --from=build /release/envicutor /envicutor/app
 COPY --from=isolate-nix /usr/local/bin/isolate /usr/local/bin
 COPY --from=isolate-nix /usr/local/etc/isolate /usr/local/etc/isolate
 COPY --chown=envicutor:envicutor --from=isolate-nix /home/envicutor/.nix-profile/bin /home/envicutor/.nix-profile/bin
-COPY ./docker-entrypoint.sh /docker-entrypoint.sh
+COPY ./docker-entrypoint.sh ./db.sql /envicutor
 USER envicutor
-ENTRYPOINT ["/docker-entrypoint.sh"]
+ENTRYPOINT ["/envicutor/docker-entrypoint.sh"]
 CMD ["/envicutor/app"]

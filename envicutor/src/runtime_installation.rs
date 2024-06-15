@@ -125,13 +125,13 @@ pub async fn install_runtime(
     })?;
 
     let mounts = [
-        "/nix/store:rw,dev",
-        workdir.path.as_str(),
-        "/home/envicutor/.nix-profile/bin",
+        "nix:rw".to_string(),
+        format!("box={}", workdir.path),
+        "nix-bin=/home/envicutor/.nix-profile/bin".to_string(),
     ];
     let args = [
-        "/home/envicutor/.nix-profile/bin/nix-shell".to_string(),
-        format!("{}/shell.nix", workdir.path),
+        "/nix-bin/nix-shell".to_string(),
+        "/box/shell.nix".to_string(),
         "--run".to_string(),
         "export".to_string(),
     ];

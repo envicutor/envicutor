@@ -1,1 +1,1 @@
-pub const DB_PATH: &str = "/envicutor/runtimes/db.sql";
+pub const DB_PATH: &str = "/envicutor/runtimes/runtimes.db";

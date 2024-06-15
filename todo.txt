@@ -10,6 +10,7 @@
 - Nix runtimes will be inconsistent if we use non-deterministic nix channels and a worker gets added after a nix channel was updated
   - Disable nix channels
 - Proper logging
+- Use anyhow instead of error string
 
 - Suggested architecture
   - Directory containing runtime ids

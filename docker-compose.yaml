@@ -11,8 +11,6 @@ services:
       - runtimes:/envicutor/runtimes
       - nix:/nix
     privileged: true
-    ports:
-      - '5000:5000'
     environment:
       - PORT=5000
       - INSTALLATION_WALL_TIME=5000
@@ -22,3 +20,6 @@ services:
       - INSTALLATION_MAX_OPEN_FILES=256
       - INSTALLATION_MAX_FILE_SIZE=1000000
       - INSTALLATION_MAX_NUMBER_OF_PROCESSES=64
+  test:
+    build: ./test
+    profiles: [test]

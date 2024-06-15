@@ -1,7 +1,6 @@
 use serde::Deserialize;
 
-type Seconds = u32;
-type Kilobytes = u32;
+use crate::units::{Kilobytes, Seconds};
 
 pub trait GetLimits {
     fn get(&self, system_limits: &MandatoryLimits) -> Result<MandatoryLimits, String>;

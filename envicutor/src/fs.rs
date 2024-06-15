@@ -8,6 +8,7 @@ pub async fn create_dir_replacing_existing(path: &String) -> Result<(), Error> {
         .await
         .map_err(|e| anyhow!("Failed to check if {path} exists\nError: {e}"))?
     {
+        eprintln!("Found an existing directory at: {path}, replacing it");
         fs::remove_dir_all(&path)
             .await
             .map_err(|e| anyhow!("Failed to remove: {path}\nError: {e}"))?;

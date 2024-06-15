@@ -87,6 +87,7 @@ async fn main() {
         eprintln!("Could not find PORT environment variable, defaulting to 5000");
         DEFAULT_PORT.into()
     });
+
     let signal = async {
         signal::unix::signal(SignalKind::terminate())
             .expect("Failed to install SIGTERM handler")
@@ -94,6 +95,7 @@ async fn main() {
             .await;
         eprintln!("Received SIGTERM, shutting down...");
     };
+
     eprintln!("Listening on port {port}");
     let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{port}"))
         .await
