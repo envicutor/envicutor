@@ -8,6 +8,7 @@ use axum::{routing::post, Router};
 use envicutor::{
     limits::{MandatoryLimits, SystemLimits},
     runtime_installation::install_runtime,
+    units::WholeSeconds,
 };
 use tokio::{
     signal::{self, unix::SignalKind},
@@ -51,6 +52,7 @@ fn get_limits_from_env_var(prefix: &str) -> MandatoryLimits {
     }
 }
 
+#[allow(dead_code)]
 fn check_and_get_system_limits() -> SystemLimits {
     SystemLimits {
         installation: get_limits_from_env_var("INSTALLATION"),
@@ -59,7 +61,12 @@ fn check_and_get_system_limits() -> SystemLimits {
 
 #[tokio::main]
 async fn main() {
-    let system_limits = check_and_get_system_limits();
+    let installation_timeout: WholeSeconds = env::var("INSTALLATION_TIMEOUT").unwrap_or_else(|_| {
+        eprintln!("Could not find INSTALLATION_TIMEOUT environment variable, defaulting to 120 seconds");
+        "120".to_string()
+    }).parse().unwrap_or_else(|_| {
+        panic!("Invalid INSTALLATION_TIMEOUT");
+    });
     // Currently we only allow one runtime installation at a time to avoid concurrency issues with Nix and SQLite
     let installation_semaphore = Arc::new(Semaphore::new(1));
     let box_id = Arc::new(AtomicU64::new(0));
@@ -67,13 +74,12 @@ async fn main() {
     let app = Router::new().route(
         "/install",
         post({
-            let system_limits = system_limits.clone();
             let installation_semaphore = installation_semaphore.clone();
             let box_id = box_id.clone();
             let metadata_cache = metadata_cache.clone();
             move |req| {
                 install_runtime(
-                    system_limits,
+                    installation_timeout,
                     installation_semaphore,
                     box_id,
                     metadata_cache,

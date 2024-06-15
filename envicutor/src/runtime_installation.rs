@@ -8,13 +8,7 @@ use std::{
     },
 };
 
-use crate::{
-    globals::DB_PATH,
-    isolate::Isolate,
-    limits::{GetLimits, Limits, SystemLimits},
-    temp_dir::TempDir,
-    transaction::Transaction,
-};
+use crate::{globals::DB_PATH, temp_dir::TempDir, transaction::Transaction, units::WholeSeconds};
 use axum::{
     body::Body,
     http::StatusCode,
@@ -22,9 +16,10 @@ use axum::{
     Json,
 };
 use rusqlite::Connection;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tokio::{
     fs,
+    process::Command,
     sync::{RwLock, Semaphore},
     task,
 };
@@ -48,7 +43,12 @@ pub struct AddRuntimeRequest {
     compile_script: String,
     run_script: String,
     source_file_name: String,
-    limits: Option<Limits>,
+}
+
+#[derive(Serialize)]
+pub struct InstallationResponse {
+    stdout: String,
+    stderr: String,
 }
 
 fn validate_request(req: &AddRuntimeRequest) -> Result<(), Response<Body>> {
@@ -84,7 +84,7 @@ const INTERNAL_SERVER_ERROR_RESPONSE: (StatusCode, Json<StaticMessage>) = (
 );
 
 pub async fn install_runtime(
-    system_limits: SystemLimits,
+    installation_timeout: WholeSeconds,
     semaphore: Arc<Semaphore>,
     box_id: Arc<AtomicU64>,
     metadata_cache: Arc<RwLock<HashMap<u32, String>>>,
@@ -94,10 +94,6 @@ pub async fn install_runtime(
 
     // TODO: abstract modulo logic
     let current_box_id = box_id.fetch_add(1, Ordering::SeqCst) % MAX_BOX_ID;
-    let isolate = Isolate::init(current_box_id).await.map_err(|e| {
-        eprintln!("Failed to initialize isolate: {e}");
-        INTERNAL_SERVER_ERROR_RESPONSE.into_response()
-    })?;
 
     let workdir = TempDir::new(format!("/tmp/{current_box_id}"))
         .await
@@ -114,33 +110,27 @@ pub async fn install_runtime(
             INTERNAL_SERVER_ERROR_RESPONSE.into_response()
         })?;
 
-    let limits = req
-        .limits
-        .get(&system_limits.installation)
-        .map_err(|message| (StatusCode::BAD_REQUEST, Json(Message { message })).into_response())?;
-
     let _permit = semaphore.acquire().await.map_err(|e| {
         eprintln!("Failed to acquire semaphore: {e}");
         INTERNAL_SERVER_ERROR_RESPONSE.into_response()
     })?;
 
-    let mounts = [
-        "nix:rw".to_string(),
-        format!("box={}", workdir.path),
-        "nix-bin=/home/envicutor/nix-bin".to_string(),
-    ];
-    let args = [
-        "/nix-bin/nix-shell".to_string(),
-        "/box/shell.nix".to_string(),
+    let mut cmd = Command::new("/home/envicutor/nix-bin/nix-shell");
+    cmd.args([
+        "--timeout".to_string(),
+        installation_timeout.to_string(),
+        nix_shell_path,
         "--run".to_string(),
         "export".to_string(),
-    ];
-    let result = isolate.run(&mounts, &limits, &args).await.map_err(|e| {
-        eprintln!("Failed to run isolate: {e}");
+    ]);
+    let cmd_res = cmd.output().await.map_err(|e| {
+        eprintln!("Failed to run nix-shell: {e}");
         INTERNAL_SERVER_ERROR_RESPONSE.into_response()
     })?;
+    let stdout = String::from_utf8_lossy(&cmd_res.stdout).trim().to_string();
+    let stderr = String::from_utf8_lossy(&cmd_res.stderr).trim().to_string();
 
-    if result.exit_code == Some(0) {
+    if cmd_res.status.success() {
         let runtime_name = req.name.clone();
         let source_file_name = req.source_file_name;
 
@@ -223,7 +213,7 @@ pub async fn install_runtime(
         let env_script_path = format!("{runtime_dir}/env");
         crate::fs::write_file_and_set_permissions(
             &env_script_path,
-            &result.stdout,
+            &stdout,
             Permissions::from_mode(0o755),
         )
         .await
@@ -244,5 +234,9 @@ pub async fn install_runtime(
         trx.commit();
     }
 
-    Ok((StatusCode::OK, Json(result)).into_response())
+    Ok((
+        StatusCode::OK,
+        Json(InstallationResponse { stdout, stderr }),
+    )
+        .into_response())
 }
