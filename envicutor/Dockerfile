@@ -21,8 +21,8 @@ USER envicutor
 RUN /bin/bash -c "curl -L https://nixos.org/nix/install | sh"
 
 FROM debian:bookworm-20240612
+RUN useradd -m envicutor && mkdir -p /envicutor/runtimes && chown envicutor:envicutor /envicutor/runtimes && apt-get update && apt-get install -y sqlite3
 COPY --chown=envicutor:envicutor --chmod=755 --from=isolate-nix /nix /nix
-RUN useradd -m envicutor && mkdir -p /envicutor/runtimes && chown envicutor:envicutor /envicutor/runtimes
 COPY --from=build /release/envicutor /envicutor/app
 COPY --from=isolate-nix /usr/local/bin/isolate /usr/local/bin
 COPY --from=isolate-nix /usr/local/etc/isolate /usr/local/etc/isolate
@@ -30,4 +30,4 @@ COPY --chown=envicutor:envicutor --from=isolate-nix /home/envicutor/.nix-profile
 COPY ./docker-entrypoint.sh /docker-entrypoint.sh
 USER envicutor
 ENTRYPOINT ["/docker-entrypoint.sh"]
-CMD ["/bin/bash"]
+CMD ["/envicutor/app"]

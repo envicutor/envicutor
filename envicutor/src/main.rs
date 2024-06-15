@@ -9,7 +9,10 @@ use envicutor::{
     limits::{MandatoryLimits, SystemLimits},
     runtime_installation::install_runtime,
 };
-use tokio::sync::{RwLock, Semaphore};
+use tokio::{
+    signal::{self, unix::SignalKind},
+    sync::{RwLock, Semaphore},
+};
 
 const DEFAULT_PORT: &str = "5000";
 
@@ -84,10 +87,19 @@ async fn main() {
         eprintln!("Could not find PORT environment variable, defaulting to 5000");
         DEFAULT_PORT.into()
     });
+    let signal = async {
+        signal::unix::signal(SignalKind::terminate())
+            .expect("Failed to install SIGTERM handler")
+            .recv()
+            .await;
+        eprintln!("Received SIGTERM, shutting down...");
+    };
+    eprintln!("Listening on port {port}");
     let listener = tokio::net::TcpListener::bind(format!("0.0.0.0:{port}"))
         .await
         .expect("Failed to bind to address");
     axum::serve(listener, app)
+        .with_graceful_shutdown(signal)
         .await
         .expect("Failed to start server");
 }

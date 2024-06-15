@@ -43,12 +43,11 @@ pub struct StaticMessage {
 
 #[derive(Deserialize)]
 pub struct AddRuntimeRequest {
-    pub name: String,
-    pub description: String,
-    pub nix_shell: String,
-    pub compile_script: String,
-    pub run_script: String,
-    pub source_file_name: String,
+    name: String,
+    nix_shell: String,
+    compile_script: String,
+    run_script: String,
+    source_file_name: String,
     limits: Option<Limits>,
 }
 
@@ -125,9 +124,13 @@ pub async fn install_runtime(
         INTERNAL_SERVER_ERROR_RESPONSE.into_response()
     })?;
 
-    let mounts = ["/nix/store:rw,dev", workdir.path.as_str()];
+    let mounts = [
+        "/nix/store:rw,dev",
+        workdir.path.as_str(),
+        "/home/envicutor/.nix-profile/bin",
+    ];
     let args = [
-        "nix-shell".to_string(),
+        "/home/envicutor/.nix-profile/bin/nix-shell".to_string(),
         format!("{}/shell.nix", workdir.path),
         "--run".to_string(),
         "export".to_string(),
@@ -141,7 +144,7 @@ pub async fn install_runtime(
         let runtime_name = req.name.clone();
         let source_file_name = req.source_file_name;
 
-        let (runtime_id, _trx) = task::spawn_blocking(move || {
+        let (runtime_id, mut trx) = task::spawn_blocking(move || {
             let connection = Connection::open(DB_PATH).map_err(|e| {
                 eprintln!("Failed to open SQLite connection: {e}");
                 INTERNAL_SERVER_ERROR_RESPONSE.into_response()
@@ -157,8 +160,8 @@ pub async fn install_runtime(
                     INTERNAL_SERVER_ERROR_RESPONSE.into_response()
                 })?;
 
-            let trx = Transaction {
-                rollback_fn: move |conn| {
+            let trx = Transaction::init(
+                move |conn| {
                     let res = conn.execute("DELETE FROM runtime WHERE name = ?", [&runtime_name]);
                     if let Err(e) = res {
                         eprintln!(
@@ -166,7 +169,7 @@ pub async fn install_runtime(
                         );
                     }
                 },
-            };
+            );
 
             let row_id = connection
                 .query_row("SELECT last_insert_rowid()", (), |row| row.get(0))
@@ -238,6 +241,7 @@ pub async fn install_runtime(
 
         let mut metadata_guard = metadata_cache.write().await;
         metadata_guard.insert(runtime_id, req.name);
+        trx.commit();
     }
 
     Ok((StatusCode::OK, Json(result)).into_response())
