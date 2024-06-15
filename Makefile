@@ -14,7 +14,7 @@ stop:
 	docker compose down
 
 migrate:
-	docker volume rm src_runtimes
+	docker volume rm -f src_runtimes
 
 stop-test:
 	docker compose --profile test down

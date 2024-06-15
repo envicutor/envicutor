@@ -76,7 +76,8 @@ impl Isolate {
         let mut cmd = Command::new("isolate");
         cmd.arg("--run")
             .arg(&format!("--meta={}", metadata_file_path))
-            .arg("--cg");
+            .arg("--cg")
+            .args(["-E", "HOME=/tmp"]);
 
         for dir in mounts {
             cmd.arg(format!("--dir={}", dir));
@@ -127,7 +128,7 @@ impl Isolate {
             let value = value_res
                 .map_err(|_| anyhow!("Failed to parse metadata file, received: {line}"))?;
             match key {
-                "cgmem" => {
+                "cg-mem" => {
                     memory = Some(value.parse().map_err(|_| {
                         anyhow!("Failed to parse memory usage, received value: {value}")
                     })?)

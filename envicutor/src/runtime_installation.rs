@@ -127,7 +127,7 @@ pub async fn install_runtime(
     let mounts = [
         "nix:rw".to_string(),
         format!("box={}", workdir.path),
-        "nix-bin=/home/envicutor/.nix-profile/bin".to_string(),
+        "nix-bin=/home/envicutor/nix-bin".to_string(),
     ];
     let args = [
         "/nix-bin/nix-shell".to_string(),
