@@ -1,4 +1,3 @@
-- Don't leak environment variables in env script
 - Ensure runtime name does not exist
 - Add newline at the end of file of scripts in case they don't exist
 - Load runtimes into cache on startup
@@ -10,5 +9,3 @@
   - Disable nix channels
 - Use anyhow instead of error string
 - Proper logging
-
-- Entering the docker container as root, doing `su - envicutor`, then /bin/bash and installing nix works

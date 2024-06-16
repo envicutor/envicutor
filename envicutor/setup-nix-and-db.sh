@@ -12,4 +12,5 @@ fi
 
 sqlite3 /envicutor/runtimes/runtimes.db < /envicutor/db.sql && \
 echo "Initialized the database" && \
+cd /tmp # So PWD does not get leaked in env vars
 exec /envicutor/app

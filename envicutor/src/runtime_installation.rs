@@ -117,10 +117,13 @@ pub async fn install_runtime(
         INTERNAL_SERVER_ERROR_RESPONSE.into_response()
     })?;
 
-    let mut cmd = Command::new(format!("{NIX_BIN_PATH}/nix-shell"));
-    cmd.args(["--timeout".to_string(), installation_timeout.to_string()])
+    let mut cmd = Command::new("env");
+    cmd.arg("-i")
+        .arg("PATH=/bin")
+        .arg(format!("{NIX_BIN_PATH}/nix-shell"))
+        .args(["--timeout".to_string(), installation_timeout.to_string()])
         .arg(nix_shell_path)
-        .args(["--run", "export"]);
+        .args(["--run", "/bin/bash -c export"]);
     let cmd_res = cmd.output().await.map_err(|e| {
         eprintln!("Failed to run nix-shell: {e}");
         INTERNAL_SERVER_ERROR_RESPONSE.into_response()
