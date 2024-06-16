@@ -51,7 +51,11 @@ pub struct InstallationResponse {
     stderr: String,
 }
 
-fn validate_request(req: &AddRuntimeRequest) -> Result<(), Response<Body>> {
+async fn validate_request(
+    metadata_cache: &Arc<RwLock<HashMap<u32, String>>>,
+    req: &AddRuntimeRequest,
+) -> Result<(), Response<Body>> {
+    let metadata_guard = metadata_cache.read().await;
     let bad_request_message = if req.name.is_empty() {
         "Name can't be empty"
     } else if req.nix_shell.is_empty() {
@@ -60,6 +64,8 @@ fn validate_request(req: &AddRuntimeRequest) -> Result<(), Response<Body>> {
         "Run command can't be empty"
     } else if req.source_file_name.is_empty() {
         "Source file name can't be empty"
+    } else if metadata_guard.values().any(|name| *name == req.name) {
+        "A runtime with this name already exists"
     } else {
         ""
     };
@@ -92,7 +98,7 @@ pub async fn install_runtime(
     metadata_cache: Arc<RwLock<HashMap<u32, String>>>,
     Json(req): Json<AddRuntimeRequest>,
 ) -> Result<Response<Body>, Response<Body>> {
-    validate_request(&req)?;
+    validate_request(&metadata_cache, &req).await?;
 
     // TODO: abstract modulo logic
     let current_box_id = box_id.fetch_add(1, Ordering::SeqCst) % MAX_BOX_ID;
