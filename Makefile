@@ -1,10 +1,7 @@
 .PHONY: test
 
-start-no-logs:
-	docker compose up -d --build
-
 start:
-	make start-no-logs
+	docker compose up -d --build
 	make logs
 
 logs:
