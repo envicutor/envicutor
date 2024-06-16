@@ -1,4 +1,6 @@
+- Don't leak environment variables in env script
 - Ensure runtime name does not exist
+- Add newline at the end of file of scripts in case they don't exist
 - Load runtimes into cache on startup
 - Delete runtimes (maybe from database only)
 - Make installation acquire normal semaphore as well (and add the reasoning to presentation) or stop everything when installing
@@ -6,24 +8,7 @@
   - Prepare the real value in Dockerfile
 - Nix runtimes will be inconsistent if we use non-deterministic nix channels and a worker gets added after a nix channel was updated
   - Disable nix channels
-- Proper logging
 - Use anyhow instead of error string
+- Proper logging
 
-- Suggested architecture
-  - Directory containing runtime ids
-    - compile_script (if any)
-    - run_script
-    - env
-    - shell.nix
-    - metadata (to be stored in memory, Judge0 stores them in a database)
-
-- Directories to create in Docker container
-  - /envicutor/runtimes
-
-- Questions
-  - Use nix image with pinned sha for reproducible .nix-profile?
-    - Can nix installation be decoupled from store?
-    - Nix installation is basically /nix
-      - If you have a /nix volume then nix installation is useless
-        - Except for stuff in user profile
-        - So just keep copying user profile stuff to another directory after nix installation like you are doing
+- Entering the docker container as root, doing `su - envicutor`, then /bin/bash and installing nix works

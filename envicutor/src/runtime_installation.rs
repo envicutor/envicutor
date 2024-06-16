@@ -76,6 +76,8 @@ fn validate_request(req: &AddRuntimeRequest) -> Result<(), Response<Body>> {
     }
 }
 
+const NIX_BIN_PATH: &str = "/home/envicutor/.nix-profile/bin";
+
 const INTERNAL_SERVER_ERROR_RESPONSE: (StatusCode, Json<StaticMessage>) = (
     StatusCode::INTERNAL_SERVER_ERROR,
     Json(StaticMessage {
@@ -115,14 +117,10 @@ pub async fn install_runtime(
         INTERNAL_SERVER_ERROR_RESPONSE.into_response()
     })?;
 
-    let mut cmd = Command::new("/home/envicutor/nix-bin/nix-shell");
-    cmd.args([
-        "--timeout".to_string(),
-        installation_timeout.to_string(),
-        nix_shell_path,
-        "--run".to_string(),
-        "export".to_string(),
-    ]);
+    let mut cmd = Command::new(format!("{NIX_BIN_PATH}/nix-shell"));
+    cmd.args(["--timeout".to_string(), installation_timeout.to_string()])
+        .arg(nix_shell_path)
+        .args(["--run", "export"]);
     let cmd_res = cmd.output().await.map_err(|e| {
         eprintln!("Failed to run nix-shell: {e}");
         INTERNAL_SERVER_ERROR_RESPONSE.into_response()
@@ -237,6 +235,37 @@ pub async fn install_runtime(
     Ok((
         StatusCode::OK,
         Json(InstallationResponse { stdout, stderr }),
+    )
+        .into_response())
+}
+
+pub async fn update_nix(
+    nix_update_timeout: WholeSeconds,
+    semaphore: Arc<Semaphore>,
+) -> Result<Response<Body>, Response<Body>> {
+    let mut cmd = Command::new(format!("{NIX_BIN_PATH}/nix-env"));
+    cmd.arg("--install")
+        .args(["--file", "<nixpkgs>"])
+        .args(["--attr", "nix", "cacert"])
+        .args(["-I", "nixpkgs=channel:nixpkgs-unstable"])
+        .args(["--timeout".to_string(), nix_update_timeout.to_string()]);
+
+    let _permit = semaphore.acquire().await.map_err(|e| {
+        eprintln!("Failed to acquire installation semaphore: {e}");
+        INTERNAL_SERVER_ERROR_RESPONSE.into_response()
+    })?;
+
+    let cmd_res = cmd.output().await.map_err(|e| {
+        eprintln!("Failed to get the output of the nix update command: {e}");
+        INTERNAL_SERVER_ERROR_RESPONSE.into_response()
+    })?;
+
+    Ok((
+        StatusCode::OK,
+        Json(InstallationResponse {
+            stdout: String::from_utf8_lossy(&cmd_res.stdout).to_string(),
+            stderr: String::from_utf8_lossy(&cmd_res.stderr).to_string(),
+        }),
     )
         .into_response())
 }

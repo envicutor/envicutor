@@ -4,10 +4,15 @@ use std::{
     sync::{atomic::AtomicU64, Arc},
 };
 
-use axum::{routing::post, Router};
+use axum::{
+    body::Body,
+    response::{IntoResponse, Response},
+    routing::{get, post},
+    Router,
+};
 use envicutor::{
     limits::{MandatoryLimits, SystemLimits},
-    runtime_installation::install_runtime,
+    runtime_installation::{install_runtime, update_nix},
     units::WholeSeconds,
 };
 use tokio::{
@@ -59,35 +64,59 @@ fn check_and_get_system_limits() -> SystemLimits {
     }
 }
 
+fn get_whole_seconds_or_set_default(env_var: &str, default: WholeSeconds) -> WholeSeconds {
+    env::var(env_var)
+        .unwrap_or_else(|_| {
+            eprintln!(
+                "Could not find {env_var} environment variable, defaulting to {default} seconds"
+            );
+            default.to_string()
+        })
+        .parse()
+        .unwrap_or_else(|_| {
+            panic!("Invalid {env_var}");
+        })
+}
+
+async fn get_health() -> Response<Body> {
+    "Up and running\n".into_response()
+}
+
 #[tokio::main]
 async fn main() {
-    let installation_timeout: WholeSeconds = env::var("INSTALLATION_TIMEOUT").unwrap_or_else(|_| {
-        eprintln!("Could not find INSTALLATION_TIMEOUT environment variable, defaulting to 120 seconds");
-        "120".to_string()
-    }).parse().unwrap_or_else(|_| {
-        panic!("Invalid INSTALLATION_TIMEOUT");
-    });
+    let installation_timeout = get_whole_seconds_or_set_default("INSTALLATION_TIMEOUT", 120);
+    let update_timeout = get_whole_seconds_or_set_default("UPDATE_TIMEOUT", 240);
+
     // Currently we only allow one runtime installation at a time to avoid concurrency issues with Nix and SQLite
     let installation_semaphore = Arc::new(Semaphore::new(1));
     let box_id = Arc::new(AtomicU64::new(0));
     let metadata_cache = Arc::new(RwLock::new(HashMap::new()));
-    let app = Router::new().route(
-        "/install",
-        post({
-            let installation_semaphore = installation_semaphore.clone();
-            let box_id = box_id.clone();
-            let metadata_cache = metadata_cache.clone();
-            move |req| {
-                install_runtime(
-                    installation_timeout,
-                    installation_semaphore,
-                    box_id,
-                    metadata_cache,
-                    req,
-                )
-            }
-        }),
-    );
+    let app = Router::new()
+        .route("/health", get(get_health))
+        .route(
+            "/install",
+            post({
+                let installation_semaphore = installation_semaphore.clone();
+                let box_id = box_id.clone();
+                let metadata_cache = metadata_cache.clone();
+                move |req| {
+                    install_runtime(
+                        installation_timeout,
+                        installation_semaphore,
+                        box_id,
+                        metadata_cache,
+                        req,
+                    )
+                }
+            }),
+        )
+        .route(
+            "/update",
+            post({
+                let installation_semaphore = installation_semaphore.clone();
+                move || update_nix(update_timeout, installation_semaphore)
+            }),
+        );
 
     let port = env::var("PORT").unwrap_or_else(|_| {
         eprintln!("Could not find PORT environment variable, defaulting to 5000");

@@ -14,7 +14,7 @@ stop:
 	docker compose down
 
 migrate:
-	docker volume rm -f src_runtimes
+	docker volume rm -f envicutor_runtimes
 
 stop-test:
 	docker compose --profile test down
@@ -23,6 +23,5 @@ test:
 	make stop-test
 	make stop
 	make migrate
-	make start-no-logs
-	docker compose --profile test up -d
+	docker compose --profile test up -d --build
 	docker compose --profile test logs -f

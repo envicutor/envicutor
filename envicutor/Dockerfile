@@ -24,11 +24,9 @@ RUN useradd -m envicutor && \
     apt-get update && \
     apt-get install -y sqlite3 curl xz-utils && \
     install -d -m755 -o envicutor -g envicutor /nix
-USER envicutor
-RUN /bin/bash -c "curl -L https://nixos.org/nix/install | sh && mkdir ~/nix-bin && cp ~/.nix-profile/bin/* ~/nix-bin/"
 COPY --from=build /release/envicutor /envicutor/app
 COPY --from=isolate /usr/local/bin/isolate /usr/local/bin
 COPY --from=isolate /usr/local/etc/isolate /usr/local/etc/isolate
-COPY ./docker-entrypoint.sh ./db.sql /envicutor
-ENTRYPOINT ["/envicutor/docker-entrypoint.sh"]
-CMD ["/envicutor/app"]
+COPY ./setup-cgroup.sh ./setup-nix-and-db.sh ./db.sql /envicutor
+# Using the Docker USER instruction leads to an intensive loop in nix's installation script. I SIMPLY DON'T UNDERSTAND WHY
+CMD ["/envicutor/setup-cgroup.sh"]

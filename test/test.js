@@ -15,7 +15,6 @@ const sendRequest = (method, url, body) => {
 };
 
 (async () => {
-  // Install Python
   {
     console.log('Installing Python');
     const res = await sendRequest('POST', `${BASE_URL}/install`, {
@@ -37,6 +36,13 @@ pkgs.mkShell {
       source_file_name: 'main.py'
     });
 
+    console.log(await res.text());
+    assert.equal(res.status, 200);
+  }
+
+  {
+    console.log('Updating Nix');
+    const res = await sendRequest('POST', `${BASE_URL}/update`);
     console.log(await res.text());
     assert.equal(res.status, 200);
   }
