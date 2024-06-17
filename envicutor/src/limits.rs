@@ -1,9 +1,10 @@
+use anyhow::{anyhow, Error};
 use serde::Deserialize;
 
 use crate::types::{Kilobytes, Seconds};
 
 pub trait GetLimits {
-    fn get(&self, system_limits: &MandatoryLimits) -> Result<MandatoryLimits, String>;
+    fn get(&self, system_limits: &MandatoryLimits) -> Result<MandatoryLimits, Error>;
 }
 
 #[derive(Deserialize)]
@@ -18,12 +19,12 @@ pub struct Limits {
 }
 
 impl GetLimits for Option<Limits> {
-    fn get(&self, system_limits: &MandatoryLimits) -> Result<MandatoryLimits, String> {
+    fn get(&self, system_limits: &MandatoryLimits) -> Result<MandatoryLimits, Error> {
         match &self {
             Some(req_limits) => {
                 if let Some(wall_time) = req_limits.wall_time {
                     if wall_time > system_limits.wall_time {
-                        return Err(format!(
+                        return Err(anyhow!(
                             "wall_time can't exceed {} seconds",
                             system_limits.wall_time
                         ));
@@ -31,7 +32,7 @@ impl GetLimits for Option<Limits> {
                 }
                 if let Some(cpu_time) = req_limits.cpu_time {
                     if cpu_time > system_limits.cpu_time {
-                        return Err(format!(
+                        return Err(anyhow!(
                             "cpu_time can't exceed {} seconds",
                             system_limits.cpu_time
                         ));
@@ -39,7 +40,7 @@ impl GetLimits for Option<Limits> {
                 }
                 if let Some(memory) = req_limits.memory {
                     if memory > system_limits.memory {
-                        return Err(format!(
+                        return Err(anyhow!(
                             "memory can't exceed {} kilobytes",
                             system_limits.memory
                         ));
@@ -47,7 +48,7 @@ impl GetLimits for Option<Limits> {
                 }
                 if let Some(extra_time) = req_limits.extra_time {
                     if extra_time > system_limits.extra_time {
-                        return Err(format!(
+                        return Err(anyhow!(
                             "extra_time can't exceed {} seconds",
                             system_limits.extra_time
                         ));
@@ -55,7 +56,7 @@ impl GetLimits for Option<Limits> {
                 }
                 if let Some(max_open_files) = req_limits.max_open_files {
                     if max_open_files > system_limits.max_open_files {
-                        return Err(format!(
+                        return Err(anyhow!(
                             "max_open_files can't exceed {}",
                             system_limits.max_open_files
                         ));
@@ -63,7 +64,7 @@ impl GetLimits for Option<Limits> {
                 }
                 if let Some(max_file_size) = req_limits.max_file_size {
                     if max_file_size > system_limits.max_file_size {
-                        return Err(format!(
+                        return Err(anyhow!(
                             "max_file_size can't exceed {} kilobytes",
                             system_limits.max_file_size
                         ));
@@ -71,7 +72,7 @@ impl GetLimits for Option<Limits> {
                 }
                 if let Some(max_number_of_processes) = req_limits.max_number_of_processes {
                     if max_number_of_processes > system_limits.max_number_of_processes {
-                        return Err(format!(
+                        return Err(anyhow!(
                             "max_number_of_processes can't exceed {}",
                             system_limits.max_number_of_processes
                         ));

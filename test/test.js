@@ -61,7 +61,7 @@ pkgs.mkShell {
       source_file_name: 'main.py'
     });
 
-    let text = await res.text();
+    const text = await res.text();
     console.log(text);
     assert.equal(res.status, 400);
     let body = JSON.parse(text);
@@ -81,7 +81,7 @@ pkgs.mkShell {
     console.log('Listing runtimes (should have Python)');
     const res = await sendRequest('GET', `${BASE_URL}/runtimes`);
 
-    let text = await res.text();
+    const text = await res.text();
     console.log(text);
     assert.equal(res.status, 200);
     let body = JSON.parse(text);
@@ -92,7 +92,7 @@ pkgs.mkShell {
     console.log('Deleting runtime with id 2 (invalid)');
     const res = await sendRequest('DELETE', `${BASE_URL}/runtimes/2`);
 
-    let text = await res.text();
+    const text = await res.text();
     console.log(text);
     assert.equal(res.status, 404);
     let body = JSON.parse(text);
@@ -103,7 +103,7 @@ pkgs.mkShell {
     console.log('Deleting runtime with id 1 (delete Python)');
     const res = await sendRequest('DELETE', `${BASE_URL}/runtimes/1`);
 
-    let text = await res.text();
+    const text = await res.text();
     console.log(text);
     assert.equal(res.status, 200);
   }
@@ -112,7 +112,7 @@ pkgs.mkShell {
     console.log('Listing runtimes (should be empty)');
     const res = await sendRequest('GET', `${BASE_URL}/runtimes`);
 
-    let text = await res.text();
+    const text = await res.text();
     console.log(text);
     assert.equal(res.status, 200);
     let body = JSON.parse(text);

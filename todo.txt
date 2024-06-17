@@ -1,7 +1,4 @@
+- Run endpoint
 - Make running acquire installation semaphore (and add reasoning to presentation)
-- Nix runtimes will be inconsistent if we use non-deterministic nix channels and a worker gets added after a nix channel was updated
-  - Disable nix channels
-- Use anyhow instead of error string
 - Proper logging
-
-- How to test stuff that happen at startup?
+- Make sure the variables are declared in tests
