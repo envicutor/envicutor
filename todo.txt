@@ -1,8 +1,5 @@
-- List runtimes
 - Delete runtimes (maybe from database and cache only)
-- Make installation acquire normal semaphore as well (and add the reasoning to presentation) or make running acquire installation semaphore
-- If nix gets re-installed, nix-profile becomes bad (no reproducibility)
-  - Prepare the real value in Dockerfile
+- Make running acquire installation semaphore (and add reasoning to presentation)
 - Nix runtimes will be inconsistent if we use non-deterministic nix channels and a worker gets added after a nix channel was updated
   - Disable nix channels
 - Use anyhow instead of error string
