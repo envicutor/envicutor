@@ -8,6 +8,7 @@ use std::{
 };
 
 use crate::{
+    api::common_responses::{Message, INTERNAL_SERVER_ERROR_RESPONSE},
     globals::DB_PATH,
     strings::NewLine,
     temp_dir::TempDir,
@@ -30,16 +31,6 @@ use tokio::{
 };
 
 const MAX_BOX_ID: u64 = 2147483647;
-
-#[derive(serde::Serialize)]
-struct Message {
-    message: String,
-}
-
-#[derive(serde::Serialize)]
-pub struct StaticMessage {
-    message: &'static str,
-}
 
 #[derive(Deserialize)]
 pub struct AddRuntimeRequest {
@@ -82,13 +73,6 @@ async fn validate_request(req: &AddRuntimeRequest) -> Result<(), Response<Body>>
 }
 
 const NIX_BIN_PATH: &str = "/home/envicutor/.nix-profile/bin";
-
-const INTERNAL_SERVER_ERROR_RESPONSE: (StatusCode, Json<StaticMessage>) = (
-    StatusCode::INTERNAL_SERVER_ERROR,
-    Json(StaticMessage {
-        message: "Internal server error",
-    }),
-);
 
 pub async fn install_runtime(
     installation_timeout: WholeSeconds,

@@ -87,4 +87,35 @@ pkgs.mkShell {
     let body = JSON.parse(text);
     assert.deepEqual(body, [{ id: 1, name: 'Python' }]);
   }
+
+  {
+    console.log('Deleting runtime with id 2 (invalid)');
+    const res = await sendRequest('DELETE', `${BASE_URL}/runtimes/2`);
+
+    let text = await res.text();
+    console.log(text);
+    assert.equal(res.status, 404);
+    let body = JSON.parse(text);
+    assert.deepEqual(body, { message: 'Could not find the specified runtime' });
+  }
+
+  {
+    console.log('Deleting runtime with id 1 (delete Python)');
+    const res = await sendRequest('DELETE', `${BASE_URL}/runtimes/1`);
+
+    let text = await res.text();
+    console.log(text);
+    assert.equal(res.status, 200);
+  }
+
+  {
+    console.log('Listing runtimes (should be empty)');
+    const res = await sendRequest('GET', `${BASE_URL}/runtimes`);
+
+    let text = await res.text();
+    console.log(text);
+    assert.equal(res.status, 200);
+    let body = JSON.parse(text);
+    assert.deepEqual(body, []);
+  }
 })();

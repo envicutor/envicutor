@@ -1,4 +1,3 @@
-- Delete runtimes (maybe from database and cache only)
 - Make running acquire installation semaphore (and add reasoning to presentation)
 - Nix runtimes will be inconsistent if we use non-deterministic nix channels and a worker gets added after a nix channel was updated
   - Disable nix channels

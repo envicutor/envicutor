@@ -7,11 +7,12 @@ use std::{
 use axum::{
     body::Body,
     response::{IntoResponse, Response},
-    routing::{get, post},
+    routing::{delete, get, post},
     Router,
 };
 use envicutor::{
     api::{
+        deletion::delete_runtime,
         installation::{install_runtime, update_nix},
         listing::list_runtimes,
     },
@@ -147,6 +148,13 @@ async fn main() {
                         req,
                     )
                 }
+            }),
+        )
+        .route(
+            "/runtimes/:id",
+            delete({
+                let metadata_cache = metadata_cache.clone();
+                move |req| delete_runtime(req, metadata_cache)
             }),
         )
         .route(
