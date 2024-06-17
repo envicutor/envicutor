@@ -8,7 +8,10 @@ use std::{
     },
 };
 
-use crate::{globals::DB_PATH, temp_dir::TempDir, transaction::Transaction, units::WholeSeconds};
+use crate::{
+    globals::DB_PATH, strings::NewLine, temp_dir::TempDir, transaction::Transaction,
+    units::WholeSeconds,
+};
 use axum::{
     body::Body,
     http::StatusCode,
@@ -51,11 +54,7 @@ pub struct InstallationResponse {
     stderr: String,
 }
 
-async fn validate_request(
-    metadata_cache: &Arc<RwLock<HashMap<u32, String>>>,
-    req: &AddRuntimeRequest,
-) -> Result<(), Response<Body>> {
-    let metadata_guard = metadata_cache.read().await;
+async fn validate_request(req: &AddRuntimeRequest) -> Result<(), Response<Body>> {
     let bad_request_message = if req.name.is_empty() {
         "Name can't be empty"
     } else if req.nix_shell.is_empty() {
@@ -64,8 +63,6 @@ async fn validate_request(
         "Run command can't be empty"
     } else if req.source_file_name.is_empty() {
         "Source file name can't be empty"
-    } else if metadata_guard.values().any(|name| *name == req.name) {
-        "A runtime with this name already exists"
     } else {
         ""
     };
@@ -96,9 +93,12 @@ pub async fn install_runtime(
     semaphore: Arc<Semaphore>,
     box_id: Arc<AtomicU64>,
     metadata_cache: Arc<RwLock<HashMap<u32, String>>>,
-    Json(req): Json<AddRuntimeRequest>,
+    Json(mut req): Json<AddRuntimeRequest>,
 ) -> Result<Response<Body>, Response<Body>> {
-    validate_request(&metadata_cache, &req).await?;
+    validate_request(&req).await?;
+    req.nix_shell.add_new_line_if_none();
+    req.compile_script.add_new_line_if_none();
+    req.run_script.add_new_line_if_none();
 
     // TODO: abstract modulo logic
     let current_box_id = box_id.fetch_add(1, Ordering::SeqCst) % MAX_BOX_ID;
@@ -123,6 +123,18 @@ pub async fn install_runtime(
         INTERNAL_SERVER_ERROR_RESPONSE.into_response()
     })?;
 
+    let metadata_guard = metadata_cache.read().await;
+    if metadata_guard.values().any(|name| *name == req.name) {
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            Json(Message {
+                message: "A runtime with this name already exists".to_string(),
+            }),
+        )
+            .into_response());
+    }
+    drop(metadata_guard);
+
     let mut cmd = Command::new("env");
     cmd.arg("-i")
         .arg("PATH=/bin")
@@ -134,8 +146,8 @@ pub async fn install_runtime(
         eprintln!("Failed to run nix-shell: {e}");
         INTERNAL_SERVER_ERROR_RESPONSE.into_response()
     })?;
-    let stdout = String::from_utf8_lossy(&cmd_res.stdout).trim().to_string();
-    let stderr = String::from_utf8_lossy(&cmd_res.stderr).trim().to_string();
+    let stdout = String::from_utf8_lossy(&cmd_res.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&cmd_res.stderr).to_string();
 
     if cmd_res.status.success() {
         let runtime_name = req.name.clone();
@@ -238,6 +250,7 @@ pub async fn install_runtime(
 
         let mut metadata_guard = metadata_cache.write().await;
         metadata_guard.insert(runtime_id, req.name);
+        drop(metadata_guard);
         trx.commit();
     }
 

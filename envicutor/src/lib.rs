@@ -6,3 +6,4 @@ pub mod fs;
 pub mod transaction;
 pub mod globals;
 pub mod units;
+pub mod strings;
