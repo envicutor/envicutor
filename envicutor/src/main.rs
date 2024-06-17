@@ -11,10 +11,12 @@ use axum::{
     Router,
 };
 use envicutor::{
+    globals::DB_PATH,
     limits::{MandatoryLimits, SystemLimits},
     runtime_installation::{install_runtime, update_nix},
     units::WholeSeconds,
 };
+use rusqlite::Connection;
 use tokio::{
     signal::{self, unix::SignalKind},
     sync::{RwLock, Semaphore},
@@ -82,6 +84,33 @@ async fn get_health() -> Response<Body> {
     "Up and running\n".into_response()
 }
 
+fn get_runtimes() -> HashMap<u32, String> {
+    let connection = Connection::open(DB_PATH)
+        .unwrap_or_else(|e| panic!("Failed to open SQLite connection: {e}"));
+    let mut stmt = connection
+        .prepare("SELECT id, name FROM runtime")
+        .unwrap_or_else(|e| panic!("Failed to prepare SQL statement: {}", e));
+    let mut metadata_cache = HashMap::new();
+    let runtime_iter = stmt
+        .query_map([], |row| {
+            let id: u32 = row.get(0)?;
+            let name: String = row.get(1)?;
+            Ok((id, name))
+        })
+        .unwrap_or_else(|e| {
+            panic!("Failed to get id and name from the row: {e}");
+        });
+
+    for runtime in runtime_iter {
+        let (id, name) = runtime.unwrap_or_else(|e| {
+            panic!("Failed to get runtime from database: {e}");
+        });
+        eprintln!("Loading {id}: {name}");
+        metadata_cache.insert(id, name);
+    }
+    metadata_cache
+}
+
 #[tokio::main]
 async fn main() {
     let installation_timeout = get_whole_seconds_or_set_default("INSTALLATION_TIMEOUT", 120);
@@ -90,7 +119,7 @@ async fn main() {
     // Currently we only allow one runtime installation at a time to avoid concurrency issues with Nix and SQLite
     let installation_semaphore = Arc::new(Semaphore::new(1));
     let box_id = Arc::new(AtomicU64::new(0));
-    let metadata_cache = Arc::new(RwLock::new(HashMap::new()));
+    let metadata_cache = Arc::new(RwLock::new(get_runtimes()));
     let app = Router::new()
         .route("/health", get(get_health))
         .route(
