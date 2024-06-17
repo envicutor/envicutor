@@ -7,3 +7,5 @@
   - Disable nix channels
 - Use anyhow instead of error string
 - Proper logging
+
+- How to test stuff that happen at startup?

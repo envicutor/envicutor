@@ -4,7 +4,7 @@ use tokio::{fs, process::Command};
 use crate::{
     limits::MandatoryLimits,
     temp_dir::TempDir,
-    units::{Kilobytes, Seconds},
+    types::{Kilobytes, Seconds},
 };
 
 pub struct Isolate {

@@ -11,10 +11,13 @@ use axum::{
     Router,
 };
 use envicutor::{
+    api::{
+        installation::{install_runtime, update_nix},
+        listing::list_runtimes,
+    },
     globals::DB_PATH,
     limits::{MandatoryLimits, SystemLimits},
-    runtime_installation::{install_runtime, update_nix},
-    units::WholeSeconds,
+    types::{Metadata, WholeSeconds},
 };
 use rusqlite::Connection;
 use tokio::{
@@ -84,7 +87,7 @@ async fn get_health() -> Response<Body> {
     "Up and running\n".into_response()
 }
 
-fn get_runtimes() -> HashMap<u32, String> {
+fn get_runtimes() -> Metadata {
     let connection = Connection::open(DB_PATH)
         .unwrap_or_else(|e| panic!("Failed to open SQLite connection: {e}"));
     let mut stmt = connection
@@ -123,7 +126,14 @@ async fn main() {
     let app = Router::new()
         .route("/health", get(get_health))
         .route(
-            "/install",
+            "/runtimes",
+            get({
+                let metadata_cache = metadata_cache.clone();
+                move || list_runtimes(metadata_cache)
+            }),
+        )
+        .route(
+            "/runtimes",
             post({
                 let installation_semaphore = installation_semaphore.clone();
                 let box_id = box_id.clone();

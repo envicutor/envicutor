@@ -1,5 +1,4 @@
 use std::{
-    collections::HashMap,
     fs::Permissions,
     os::unix::fs::PermissionsExt,
     sync::{
@@ -9,8 +8,11 @@ use std::{
 };
 
 use crate::{
-    globals::DB_PATH, strings::NewLine, temp_dir::TempDir, transaction::Transaction,
-    units::WholeSeconds,
+    globals::DB_PATH,
+    strings::NewLine,
+    temp_dir::TempDir,
+    transaction::Transaction,
+    types::{Metadata, WholeSeconds},
 };
 use axum::{
     body::Body,
@@ -92,7 +94,7 @@ pub async fn install_runtime(
     installation_timeout: WholeSeconds,
     semaphore: Arc<Semaphore>,
     box_id: Arc<AtomicU64>,
-    metadata_cache: Arc<RwLock<HashMap<u32, String>>>,
+    metadata_cache: Arc<RwLock<Metadata>>,
     Json(mut req): Json<AddRuntimeRequest>,
 ) -> Result<Response<Body>, Response<Body>> {
     validate_request(&req).await?;

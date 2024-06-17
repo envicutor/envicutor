@@ -17,7 +17,7 @@ const sendRequest = (method, url, body) => {
 (async () => {
   {
     console.log('Installing Python');
-    const res = await sendRequest('POST', `${BASE_URL}/install`, {
+    const res = await sendRequest('POST', `${BASE_URL}/runtimes`, {
       name: 'Python',
       nix_shell: `
 { pkgs ? import (
@@ -42,7 +42,7 @@ pkgs.mkShell {
 
   {
     console.log('Installing Python again (should fail)');
-    const res = await sendRequest('POST', `${BASE_URL}/install`, {
+    const res = await sendRequest('POST', `${BASE_URL}/runtimes`, {
       name: 'Python',
       nix_shell: `
 { pkgs ? import (
@@ -75,5 +75,16 @@ pkgs.mkShell {
     const res = await sendRequest('POST', `${BASE_URL}/update`);
     console.log(await res.text());
     assert.equal(res.status, 200);
+  }
+
+  {
+    console.log('Listing runtimes (should have Python)');
+    const res = await sendRequest('GET', `${BASE_URL}/runtimes`);
+
+    let text = await res.text();
+    console.log(text);
+    assert.equal(res.status, 200);
+    let body = JSON.parse(text);
+    assert.deepEqual(body, [{ id: 1, name: 'Python' }]);
   }
 })();
