@@ -11,7 +11,7 @@ use rusqlite::Connection;
 use tokio::{sync::RwLock, task};
 
 use crate::{
-    api::common_responses::{Message, INTERNAL_SERVER_ERROR_RESPONSE},
+    api::common_responses::{StaticMessage, INTERNAL_SERVER_ERROR_RESPONSE},
     globals::DB_PATH,
     types::Metadata,
 };
@@ -45,8 +45,8 @@ pub async fn delete_runtime(
     if affected_rows == 0 {
         return Err((
             StatusCode::NOT_FOUND,
-            Json(Message {
-                message: "Could not find the specified runtime".to_string(),
+            Json(StaticMessage {
+                message: "Could not find the specified runtime",
             }),
         )
             .into_response());

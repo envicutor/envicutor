@@ -112,5 +112,6 @@ pub struct MandatoryLimits {
 
 #[derive(Clone)]
 pub struct SystemLimits {
-    pub installation: MandatoryLimits,
+    pub compile: MandatoryLimits,
+    pub run: MandatoryLimits,
 }

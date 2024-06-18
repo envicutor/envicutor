@@ -1,6 +1,7 @@
 use std::{
     collections::HashMap,
     env,
+    path::Path,
     sync::{atomic::AtomicU64, Arc},
 };
 
@@ -13,12 +14,13 @@ use axum::{
 use envicutor::{
     api::{
         deletion::delete_runtime,
+        execution::execute,
         installation::{install_runtime, update_nix},
         listing::list_runtimes,
     },
-    globals::DB_PATH,
+    globals::{DB_PATH, RUNTIMES_DIR},
     limits::{MandatoryLimits, SystemLimits},
-    types::{Metadata, WholeSeconds},
+    types::{Metadata, Runtime, WholeSeconds},
 };
 use rusqlite::Connection;
 use tokio::{
@@ -63,10 +65,10 @@ fn get_limits_from_env_var(prefix: &str) -> MandatoryLimits {
     }
 }
 
-#[allow(dead_code)]
 fn check_and_get_system_limits() -> SystemLimits {
     SystemLimits {
-        installation: get_limits_from_env_var("INSTALLATION"),
+        compile: get_limits_from_env_var("COMPILE"),
+        run: get_limits_from_env_var("RUN"),
     }
 }
 
@@ -92,25 +94,37 @@ fn get_runtimes() -> Metadata {
     let connection = Connection::open(DB_PATH)
         .unwrap_or_else(|e| panic!("Failed to open SQLite connection: {e}"));
     let mut stmt = connection
-        .prepare("SELECT id, name FROM runtime")
+        .prepare("SELECT id, name, source_file_name FROM runtime")
         .unwrap_or_else(|e| panic!("Failed to prepare SQL statement: {}", e));
     let mut metadata_cache = HashMap::new();
     let runtime_iter = stmt
         .query_map([], |row| {
             let id: u32 = row.get(0)?;
             let name: String = row.get(1)?;
-            Ok((id, name))
+            let source_file_name: String = row.get(2)?;
+            Ok((id, name, source_file_name))
         })
         .unwrap_or_else(|e| {
             panic!("Failed to get id and name from the row: {e}");
         });
 
     for runtime in runtime_iter {
-        let (id, name) = runtime.unwrap_or_else(|e| {
+        let (id, name, source_file_name) = runtime.unwrap_or_else(|e| {
             panic!("Failed to get runtime from database: {e}");
         });
         eprintln!("Loading {id}: {name}");
-        metadata_cache.insert(id, name);
+        metadata_cache.insert(
+            id,
+            Runtime {
+                name,
+                source_file_name,
+                is_compiled: Path::new(&format!("{RUNTIMES_DIR}/{id}/compile"))
+                    .try_exists()
+                    .unwrap_or_else(|e| {
+                        panic!("Could not check if compile script exists: {e}");
+                    }),
+            },
+        );
     }
     metadata_cache
 }
@@ -119,9 +133,13 @@ fn get_runtimes() -> Metadata {
 async fn main() {
     let installation_timeout = get_whole_seconds_or_set_default("INSTALLATION_TIMEOUT", 120);
     let update_timeout = get_whole_seconds_or_set_default("UPDATE_TIMEOUT", 240);
+    let system_limits = check_and_get_system_limits();
+    let max_concurrent_submissions: usize = env::var("MAX_CONCURRENT_SUBMISSIONS")
+        .unwrap_or_else(|_| panic!("Missing MAX_CONCURRENT_SUBMISSIONS environment variable"))
+        .parse()
+        .unwrap_or_else(|e| panic!("Invalid MAX_CONCURRENT_SUBMISSIONS: {e}"));
+    let execution_semaphore = Arc::new(Semaphore::new(max_concurrent_submissions));
 
-    // Currently we only allow one runtime installation at a time to avoid concurrency issues with Nix and SQLite
-    let installation_semaphore = Arc::new(Semaphore::new(1));
     let box_id = Arc::new(AtomicU64::new(0));
     let metadata_cache = Arc::new(RwLock::new(get_runtimes()));
     let app = Router::new()
@@ -136,18 +154,9 @@ async fn main() {
         .route(
             "/runtimes",
             post({
-                let installation_semaphore = installation_semaphore.clone();
                 let box_id = box_id.clone();
                 let metadata_cache = metadata_cache.clone();
-                move |req| {
-                    install_runtime(
-                        installation_timeout,
-                        installation_semaphore,
-                        box_id,
-                        metadata_cache,
-                        req,
-                    )
-                }
+                move |req| install_runtime(installation_timeout, box_id, metadata_cache, req)
             }),
         )
         .route(
@@ -160,8 +169,26 @@ async fn main() {
         .route(
             "/update",
             post({
-                let installation_semaphore = installation_semaphore.clone();
-                move || update_nix(update_timeout, installation_semaphore)
+                let metadata_cache = metadata_cache.clone();
+                move || update_nix(update_timeout, metadata_cache)
+            }),
+        )
+        .route(
+            "/execute",
+            post({
+                let metadata_cache = metadata_cache.clone();
+                let box_id = box_id.clone();
+                let system_limits = system_limits.clone();
+                let execution_semaphore = execution_semaphore.clone();
+                move |req| {
+                    execute(
+                        execution_semaphore,
+                        box_id,
+                        metadata_cache,
+                        system_limits,
+                        req,
+                    )
+                }
             }),
         );
 

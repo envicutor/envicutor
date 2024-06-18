@@ -1,5 +1,7 @@
+use std::process::Stdio;
+
 use anyhow::{anyhow, Error};
-use tokio::{fs, process::Command};
+use tokio::{fs, io::AsyncWriteExt, process::Command};
 
 use crate::{
     limits::MandatoryLimits,
@@ -58,9 +60,11 @@ impl Isolate {
 
     pub async fn run(
         &self,
-        mounts: &[String],
+        mounts: &[&str],
         limits: &MandatoryLimits,
-        cmd_args: &[String],
+        stdin: Option<&str>,
+        workdir: &str,
+        cmd_args: &[&str],
     ) -> Result<StageResult, Error> {
         let metadata_dir = TempDir::new(format!("/tmp/{}-metadata", self.box_id))
             .await
@@ -77,6 +81,8 @@ impl Isolate {
         cmd.arg("--run")
             .arg(&format!("--meta={}", metadata_file_path))
             .arg("--cg")
+            .arg("-s")
+            .args(["-c", workdir])
             .args(["-E", "HOME=/tmp"]);
 
         for dir in mounts {
@@ -94,8 +100,22 @@ impl Isolate {
             .arg("--")
             .args(cmd_args);
 
-        let cmd_res = cmd
-            .output()
+        let mut child = cmd
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|e| anyhow!("Failed to spawn isolate --run child process: {e}"))?;
+        if let Some(stdin) = stdin {
+            if let Some(mut stdin_handle) = child.stdin.take() {
+                stdin_handle
+                    .write_all(stdin.as_bytes())
+                    .await
+                    .map_err(|e| anyhow!("Failed to write to child process stdin: {e}"))?;
+            }
+        }
+        let cmd_res = child
+            .wait_with_output()
             .await
             .map_err(|e| anyhow!("Failed to get `isolate --run` output\nError: {e}"))?;
 

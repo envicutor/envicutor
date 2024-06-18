@@ -1,19 +1,19 @@
 use std::{
     fs::Permissions,
     os::unix::fs::PermissionsExt,
-    sync::{
-        atomic::{AtomicU64, Ordering},
-        Arc,
-    },
+    sync::{atomic::AtomicU64, Arc},
 };
 
 use crate::{
-    api::common_responses::{Message, INTERNAL_SERVER_ERROR_RESPONSE},
-    globals::DB_PATH,
+    api::{
+        common_functions::get_next_box_id,
+        common_responses::{Message, StaticMessage, INTERNAL_SERVER_ERROR_RESPONSE},
+    },
+    globals::{DB_PATH, RUNTIMES_DIR},
     strings::NewLine,
     temp_dir::TempDir,
     transaction::Transaction,
-    types::{Metadata, WholeSeconds},
+    types::{Metadata, Runtime, WholeSeconds},
 };
 use axum::{
     body::Body,
@@ -23,14 +23,7 @@ use axum::{
 };
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
-use tokio::{
-    fs,
-    process::Command,
-    sync::{RwLock, Semaphore},
-    task,
-};
-
-const MAX_BOX_ID: u64 = 2147483647;
+use tokio::{fs, process::Command, sync::RwLock, task};
 
 #[derive(Deserialize)]
 pub struct AddRuntimeRequest {
@@ -76,7 +69,6 @@ const NIX_BIN_PATH: &str = "/home/envicutor/.nix-profile/bin";
 
 pub async fn install_runtime(
     installation_timeout: WholeSeconds,
-    semaphore: Arc<Semaphore>,
     box_id: Arc<AtomicU64>,
     metadata_cache: Arc<RwLock<Metadata>>,
     Json(mut req): Json<AddRuntimeRequest>,
@@ -86,8 +78,7 @@ pub async fn install_runtime(
     req.compile_script.add_new_line_if_none();
     req.run_script.add_new_line_if_none();
 
-    // TODO: abstract modulo logic
-    let current_box_id = box_id.fetch_add(1, Ordering::SeqCst) % MAX_BOX_ID;
+    let current_box_id = get_next_box_id(&box_id);
 
     let workdir = TempDir::new(format!("/tmp/{current_box_id}"))
         .await
@@ -104,22 +95,19 @@ pub async fn install_runtime(
             INTERNAL_SERVER_ERROR_RESPONSE.into_response()
         })?;
 
-    let _permit = semaphore.acquire().await.map_err(|e| {
-        eprintln!("Failed to acquire semaphore: {e}");
-        INTERNAL_SERVER_ERROR_RESPONSE.into_response()
-    })?;
-
-    let metadata_guard = metadata_cache.read().await;
-    if metadata_guard.values().any(|name| *name == req.name) {
-        return Ok((
+    let mut metadata_guard = metadata_cache.write().await;
+    if metadata_guard
+        .values()
+        .any(|runtime| runtime.name == (&req).name)
+    {
+        return Err((
             StatusCode::BAD_REQUEST,
-            Json(Message {
-                message: "A runtime with this name already exists".to_string(),
+            Json(StaticMessage {
+                message: "A runtime with this name already exists",
             }),
         )
             .into_response());
     }
-    drop(metadata_guard);
 
     let mut cmd = Command::new("env");
     cmd.arg("-i")
@@ -137,7 +125,7 @@ pub async fn install_runtime(
 
     if cmd_res.status.success() {
         let runtime_name = req.name.clone();
-        let source_file_name = req.source_file_name;
+        let source_file_name = req.source_file_name.clone();
 
         let (runtime_id, mut trx) = task::spawn_blocking(move || {
             let connection = Connection::open(DB_PATH).map_err(|e| {
@@ -148,7 +136,7 @@ pub async fn install_runtime(
             connection
                 .execute(
                     "INSERT INTO runtime (name, source_file_name) VALUES (?, ?)",
-                    (&runtime_name, source_file_name),
+                    (&runtime_name, &source_file_name),
                 )
                 .map_err(|e| {
                     eprintln!("Failed to execute statement: {e}");
@@ -181,7 +169,7 @@ pub async fn install_runtime(
             INTERNAL_SERVER_ERROR_RESPONSE.into_response()
         })??;
 
-        let runtime_dir = format!("/envicutor/runtimes/{runtime_id}");
+        let runtime_dir = format!("{RUNTIMES_DIR}/{runtime_id}");
         crate::fs::create_dir_replacing_existing(&runtime_dir)
             .await
             .map_err(|e| {
@@ -189,7 +177,8 @@ pub async fn install_runtime(
                 INTERNAL_SERVER_ERROR_RESPONSE.into_response()
             })?;
 
-        if !req.compile_script.is_empty() {
+        let is_compiled = !req.compile_script.is_empty();
+        if !is_compiled {
             let compile_script_path = format!("{runtime_dir}/compile");
             crate::fs::write_file_and_set_permissions(
                 &compile_script_path,
@@ -234,22 +223,24 @@ pub async fn install_runtime(
                 INTERNAL_SERVER_ERROR_RESPONSE.into_response()
             })?;
 
-        let mut metadata_guard = metadata_cache.write().await;
-        metadata_guard.insert(runtime_id, req.name);
+        metadata_guard.insert(
+            runtime_id,
+            Runtime {
+                name: req.name,
+                is_compiled,
+                source_file_name: req.source_file_name,
+            },
+        );
         drop(metadata_guard);
         trx.commit();
     }
 
-    Ok((
-        StatusCode::OK,
-        Json(InstallationResponse { stdout, stderr }),
-    )
-        .into_response())
+    Ok(Json(InstallationResponse { stdout, stderr }).into_response())
 }
 
 pub async fn update_nix(
     nix_update_timeout: WholeSeconds,
-    semaphore: Arc<Semaphore>,
+    metadata_cache: Arc<RwLock<Metadata>>,
 ) -> Result<Response<Body>, Response<Body>> {
     let mut cmd = Command::new(format!("{NIX_BIN_PATH}/nix-env"));
     cmd.arg("--install")
@@ -258,10 +249,7 @@ pub async fn update_nix(
         .args(["-I", "nixpkgs=channel:nixpkgs-unstable"])
         .args(["--timeout".to_string(), nix_update_timeout.to_string()]);
 
-    let _permit = semaphore.acquire().await.map_err(|e| {
-        eprintln!("Failed to acquire installation semaphore: {e}");
-        INTERNAL_SERVER_ERROR_RESPONSE.into_response()
-    })?;
+    let _permit = metadata_cache.write().await;
 
     let cmd_res = cmd.output().await.map_err(|e| {
         eprintln!("Failed to get the output of the nix update command: {e}");

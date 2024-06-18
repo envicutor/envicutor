@@ -18,6 +18,21 @@ services:
     privileged: true
     environment:
       - PORT=5000
+      - COMPILE_WALL_TIME=60
+      - COMPILE_CPU_TIME=30
+      - COMPILE_MEMORY=100000
+      - COMPILE_EXTRA_TIME=5
+      - COMPILE_MAX_OPEN_FILES=64
+      - COMPILE_MAX_FILE_SIZE=100000
+      - COMPILE_MAX_NUMBER_OF_PROCESSES=64
+      - RUN_WALL_TIME=60
+      - RUN_CPU_TIME=30
+      - RUN_MEMORY=100000
+      - RUN_EXTRA_TIME=5
+      - RUN_MAX_OPEN_FILES=64
+      - RUN_MAX_FILE_SIZE=100000
+      - RUN_MAX_NUMBER_OF_PROCESSES=64
+      - MAX_CONCURRENT_SUBMISSIONS=64
     healthcheck:
       test: ['CMD-SHELL', 'curl -f 127.0.0.1:5000/health || exit 1']
       interval: 3s

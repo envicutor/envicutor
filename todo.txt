@@ -1,4 +1,3 @@
-- Run endpoint
-- Make running acquire installation semaphore (and add reasoning to presentation)
 - Proper logging
-- Make sure the variables are declared in tests
+- Make sure the variables are declared in installation tests
+- Remove INSTALLATION_TIMEOUT, UPDATE_TIMEOUT defaults?

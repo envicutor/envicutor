@@ -18,7 +18,7 @@ pub async fn list_runtimes(metadata_cache: Arc<RwLock<Metadata>>) -> impl IntoRe
     for (key, value) in metadata_guard.iter() {
         runtimes.push(Runtime {
             id: *key,
-            name: value.clone(),
+            name: value.name.clone(),
         });
     }
     Json(runtimes)

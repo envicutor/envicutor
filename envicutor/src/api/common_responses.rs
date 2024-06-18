@@ -8,7 +8,7 @@ pub struct Message {
 
 #[derive(serde::Serialize)]
 pub struct StaticMessage {
-    message: &'static str,
+    pub message: &'static str,
 }
 
 pub const INTERNAL_SERVER_ERROR_RESPONSE: (StatusCode, Json<StaticMessage>) = (
