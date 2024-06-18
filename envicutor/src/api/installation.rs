@@ -178,7 +178,7 @@ pub async fn install_runtime(
             })?;
 
         let is_compiled = !req.compile_script.is_empty();
-        if !is_compiled {
+        if is_compiled {
             let compile_script_path = format!("{runtime_dir}/compile");
             crate::fs::write_file_and_set_permissions(
                 &compile_script_path,

@@ -1,3 +1,6 @@
+- Don't continue if compile fails
+- Test compile failing
+- Test erroneous code
 - Proper logging
 - Make sure the variables are declared in installation tests
 - Remove INSTALLATION_TIMEOUT, UPDATE_TIMEOUT defaults?

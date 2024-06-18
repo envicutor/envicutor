@@ -145,6 +145,46 @@ pkgs.mkShell {
   }
 
   {
+    console.log('Installing C++ via gcc');
+    const res = await sendRequest('POST', `${BASE_URL}/runtimes`, {
+      name: 'C++',
+      nix_shell: `
+{ pkgs ? import (
+  fetchTarball {
+    url="https://github.com/NixOS/nixpkgs/archive/72da83d9515b43550436891f538ff41d68eecc7f.tar.gz";
+    sha256="177sws22nqkvv8am76qmy9knham2adfh3gv7hrjf6492z1mvy02y";
+  }
+) {} }:
+pkgs.mkShell {
+  nativeBuildInputs = with pkgs; [
+      gcc
+  ];
+}`,
+      compile_script: 'g++ main.cpp',
+      run_script: './a.out',
+      source_file_name: 'main.cpp'
+    });
+
+    console.log(await res.text());
+    assert.equal(res.status, 200);
+  }
+
+  {
+    console.log('Listing runtimes (should have Python and C++)');
+    const res = await sendRequest('GET', `${BASE_URL}/runtimes`);
+
+    const text = await res.text();
+    console.log(text);
+    assert.equal(res.status, 200);
+    let body = JSON.parse(text);
+    body.sort((x, y) => x.id - y.id);
+    assert.deepEqual(body, [
+      { id: 2, name: 'Python' },
+      { id: 3, name: 'C++' }
+    ]);
+  }
+
+  {
     console.log('Executing Python code');
     const res = await sendRequest('POST', `${BASE_URL}/execute`, {
       runtime_id: 2,
@@ -157,6 +197,31 @@ pkgs.mkShell {
     assert.equal(res.status, 200);
     const body = JSON.parse(text);
     assert.equal(body.run.stdout, 'Hello world\n');
+    assert.equal(body.run.stderr, '');
+  }
+
+  {
+    console.log('Executing C++ code');
+    const res = await sendRequest('POST', `${BASE_URL}/execute`, {
+      runtime_id: 3,
+      source_code: `
+#include <iostream>
+#include <string>
+
+int main() {
+  std::string in;
+  std::cin >> in;
+  std::cout << in << '\\n';
+  return 0;
+}`,
+      input: 'Hello world'
+    });
+
+    const text = await res.text();
+    console.log(text);
+    assert.equal(res.status, 200);
+    const body = JSON.parse(text);
+    assert.equal(body.run.stdout, 'Hello\n');
     assert.equal(body.run.stderr, '');
   }
 })();

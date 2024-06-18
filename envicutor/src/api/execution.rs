@@ -1,4 +1,8 @@
-use std::sync::{atomic::AtomicU64, Arc};
+use std::{
+    fs::Permissions,
+    os::unix::fs::PermissionsExt,
+    sync::{atomic::AtomicU64, Arc},
+};
 
 use axum::{
     body::Body,
@@ -83,6 +87,15 @@ pub async fn execute(
         .await
         .map_err(|e| {
             eprintln!("Failed to create temp directory (workdir): {e}");
+            INTERNAL_SERVER_ERROR_RESPONSE.into_response()
+        })?;
+    fs::set_permissions(&workdir.path, Permissions::from_mode(0o777))
+        .await
+        .map_err(|e| {
+            eprintln!(
+                "Failed to set permissions on: {}\nError: {}",
+                workdir.path, e
+            );
             INTERNAL_SERVER_ERROR_RESPONSE.into_response()
         })?;
 
