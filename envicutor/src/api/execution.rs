@@ -131,11 +131,7 @@ pub async fn execute(
                     &compile_limits,
                     None,
                     "/submission",
-                    &[
-                        "/bin/bash",
-                        "-c",
-                        &format!(". /runtime/env && /runtime/compile"),
-                    ],
+                    &["/bin/bash", "-c", ". /runtime/env && /runtime/compile"],
                 )
                 .await
                 .map_err(|e| {
@@ -165,7 +161,7 @@ pub async fn execute(
             &run_limits,
             stdin.as_deref(),
             "/submission",
-            &["/bin/bash", "-c", &format!(". /runtime/env && /runtime/run")],
+            &["/bin/bash", "-c", ". /runtime/env && /runtime/run"],
         )
         .await
         .map_err(|e| {

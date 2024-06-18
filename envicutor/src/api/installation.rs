@@ -98,7 +98,7 @@ pub async fn install_runtime(
     let mut metadata_guard = metadata_cache.write().await;
     if metadata_guard
         .values()
-        .any(|runtime| runtime.name == (&req).name)
+        .any(|runtime| runtime.name == req.name)
     {
         return Err((
             StatusCode::BAD_REQUEST,
