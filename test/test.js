@@ -1,18 +1,5 @@
 const assert = require('assert');
-
-const BASE_URL = 'http://envicutor:5000';
-
-const sendRequest = (method, url, body) => {
-  const opts = {
-    method,
-    headers: {
-      'Content-Type': 'application/json'
-    }
-  };
-  if (method.toLowerCase() !== 'get' && method.toLowerCase() !== 'delete')
-    opts.body = JSON.stringify(body);
-  return fetch(url, opts);
-};
+const { sendRequest, BASE_URL } = require('./common');
 
 (async () => {
   {
@@ -209,12 +196,10 @@ pkgs.mkShell {
 #include <string>
 
 int main() {
-  std::string in;
-  std::cin >> in;
+  std::string in = "Hello";
   std::cout << in << '\\n';
   return 0;
-}`,
-      input: 'Hello world'
+}`
     });
 
     const text = await res.text();
