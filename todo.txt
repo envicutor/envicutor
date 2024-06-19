@@ -1,2 +1,4 @@
+- Test that running is stopped if there is an installation
+- Test that installation is stopped if there are running processes
 - Limit tests
 - Proper logging
