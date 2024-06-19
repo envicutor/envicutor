@@ -40,7 +40,7 @@ pub struct ExecutionRequest {
 #[derive(Serialize)]
 pub struct ExecutionResponse {
     compile: Option<StageResult>,
-    run: StageResult,
+    run: Option<StageResult>,
 }
 
 pub async fn execute(
@@ -168,19 +168,37 @@ pub async fn execute(
         None
     };
 
-    let run_result = run_sandbox
-        .run(
-            &mounts,
-            &run_limits,
-            stdin.as_deref(),
-            "/submission",
-            &["/bin/bash", "-c", ". /runtime/env && /runtime/run"],
+    // If there is a compile_result and its exit_code is 0 or there isn't a compile_result, run
+    let should_run = if let Some(cs) = &compile_result {
+        if cs.exit_code == Some(0) {
+            true
+        } else {
+            false
+        }
+    } else {
+        true
+    };
+
+    let run_result = if should_run {
+        Some(
+            run_sandbox
+                .run(
+                    &mounts,
+                    &run_limits,
+                    stdin.as_deref(),
+                    "/submission",
+                    &["/bin/bash", "-c", ". /runtime/env && /runtime/run"],
+                )
+                .await
+                .map_err(|e| {
+                    eprintln!("Failed to run submission: {e}");
+                    INTERNAL_SERVER_ERROR_RESPONSE.into_response()
+                })?,
         )
-        .await
-        .map_err(|e| {
-            eprintln!("Failed to run submission: {e}");
-            INTERNAL_SERVER_ERROR_RESPONSE.into_response()
-        })?;
+    } else {
+        None
+    };
+
     Ok(Json(ExecutionResponse {
         compile: compile_result,
         run: run_result,

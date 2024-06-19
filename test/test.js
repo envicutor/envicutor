@@ -224,4 +224,44 @@ int main() {
     assert.equal(body.run.stdout, 'Hello\n');
     assert.equal(body.run.stderr, '');
   }
+
+  {
+    console.log('Executing C++ code with a compile error (run result should be null)');
+    const res = await sendRequest('POST', `${BASE_URL}/execute`, {
+      runtime_id: 3,
+      source_code: `
+#include <iostream>
+#include <string>
+
+int main()x {
+  std::string in;
+  std::cin >> in;
+  std::cout << in << '\\n';
+  return 0;
+}`,
+      input: 'Hello world'
+    });
+
+    const text = await res.text();
+    console.log(text);
+    assert.equal(res.status, 200);
+    const body = JSON.parse(text);
+    assert.equal(body.run, null);
+    assert.equal(body.compile.exit_code, 1);
+  }
+
+  {
+    console.log('Executing erroneous Python code');
+    const res = await sendRequest('POST', `${BASE_URL}/execute`, {
+      runtime_id: 2,
+      source_code: 'print(input()x)',
+      input: 'Hello world'
+    });
+
+    const text = await res.text();
+    console.log(text);
+    assert.equal(res.status, 200);
+    const body = JSON.parse(text);
+    assert.equal(body.run.exit_code, 1);
+  }
 })();
