@@ -25,7 +25,7 @@ const { sendRequest, BASE_URL, sleep } = require('./common');
       assert.equal(body.run.stderr, '');
     }
     const total_time = after - before;
-    console.log(`Approximate time to run all submissions: ${after - before} ms`);
+    console.log(`Approximate time to run all submissions: ${total_time} ms`);
     assert.ok(total_time < 1000, 'Total time was more than 1 second');
   }
 
@@ -55,7 +55,7 @@ time.sleep(1)`
       assert.equal(body.run.stderr, '');
     }
     const total_time = after - before;
-    console.log(`Approximate time to run all submissions: ${after - before} ms`);
+    console.log(`Approximate time to run all submissions: ${total_time} ms`);
     assert.ok(total_time < 3200, 'Total time was more than 3.2 seconds');
   }
 
@@ -101,9 +101,12 @@ time.sleep(1)`
         })()
       );
     }
+    const before = new Date();
     const durations = await Promise.all(promises);
+    const total_time = new Date() - before;
     for (const duration of durations) {
       assert.ok(duration >= 2000, 'Found a submission that finished before two seconds');
     }
+    console.log(`Approximate time to run all submissions: ${total_time} ms`);
   }
 })();
