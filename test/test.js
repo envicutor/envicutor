@@ -157,6 +157,33 @@ pkgs.mkShell {
   }
 
   {
+    console.log('Making an installation that will fail');
+    const res = await sendRequest('POST', `${BASE_URL}/runtimes`, {
+      name: 'Fake lang',
+      nix_shell: `
+{ pkgs ? import (
+  fetchTarball {
+    url="https://github.com/NixOS/nixpkgs/archive/72da83d9515b43550436891f538ff41d68eecc7f.tar.gz";
+    sha256="177sws22nqkvv8am76qmy9knham2adfh3gv7hrjf6492z1mvy02y";
+  }
+) {} }:
+pkgs.mkShell {
+  shellHook = ''
+  exit 1
+  '';
+  nativeBuildInputs = with pkgs; [];
+}
+`,
+      compile_script: 'g++ main.cpp',
+      run_script: './a.out',
+      source_file_name: 'main.cpp'
+    });
+
+    console.log(await res.text());
+    assert.equal(res.status, 200);
+  }
+
+  {
     console.log('Listing runtimes (should have Python and C++)');
     const res = await sendRequest('GET', `${BASE_URL}/runtimes`);
 

@@ -11,3 +11,5 @@ module.exports.sendRequest = (method, url, body) => {
 };
 
 module.exports.BASE_URL = 'http://envicutor:5000';
+
+module.exports.sleep = async (t) => await new Promise((res) => setTimeout(res, t));

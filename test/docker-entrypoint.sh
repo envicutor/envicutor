@@ -1,6 +1,6 @@
 #!/bin/bash
 
 echo "Executing correctness tests"
-node test.js
+node test.js || exit 1
 echo "Executing concurrency tests"
-node concurrency.js
+node concurrency.js || exit 1
