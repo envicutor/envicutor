@@ -2,6 +2,7 @@ use std::{
     collections::HashMap,
     env,
     path::Path,
+    str::FromStr,
     sync::{atomic::AtomicU64, Arc},
 };
 
@@ -30,38 +31,29 @@ use tokio::{
 
 const DEFAULT_PORT: &str = "5000";
 
+fn get_mandatory_parsed_env_var<T>(var_name: &str) -> T
+where
+    T: FromStr,
+{
+    env::var(var_name)
+        .unwrap_or_else(|_| panic!("Missing {var_name} environment variable"))
+        .parse()
+        .unwrap_or_else(|_| {
+            panic!("Invalid {var_name} environment variable");
+        })
+}
+
 fn get_limits_from_env_var(prefix: &str) -> MandatoryLimits {
     MandatoryLimits {
-        wall_time: env::var(format!("{prefix}_WALL_TIME"))
-            .unwrap_or_else(|_| panic!("Missing {prefix}_WALL_TIME environment variable"))
-            .parse()
-            .unwrap_or_else(|_| panic!("Invalid {prefix}_WALL_TIME")),
-        cpu_time: env::var(format!("{prefix}_CPU_TIME"))
-            .unwrap_or_else(|_| panic!("Missing {prefix}_CPU_TIME environment variable"))
-            .parse()
-            .unwrap_or_else(|_| panic!("Invalid {prefix}_CPU_TIME")),
-        memory: env::var(format!("{prefix}_MEMORY"))
-            .unwrap_or_else(|_| panic!("Missing {prefix}_MEMORY environment variable"))
-            .parse()
-            .unwrap_or_else(|_| panic!("Invalid {prefix}_MEMORY")),
-        extra_time: env::var(format!("{prefix}_EXTRA_TIME"))
-            .unwrap_or_else(|_| panic!("Missing {prefix}_EXTRA_TIME environment variable"))
-            .parse()
-            .unwrap_or_else(|_| panic!("Invalid {prefix}_EXTRA_TIME")),
-        max_open_files: env::var(format!("{prefix}_MAX_OPEN_FILES"))
-            .unwrap_or_else(|_| panic!("Missing {prefix}_MAX_OPEN_FILES environment variable"))
-            .parse()
-            .unwrap_or_else(|_| panic!("Invalid {prefix}_MAX_OPEN_FILES")),
-        max_file_size: env::var(format!("{prefix}_MAX_FILE_SIZE"))
-            .unwrap_or_else(|_| panic!("Missing {prefix}_MAX_FILE_SIZE environment variable"))
-            .parse()
-            .unwrap_or_else(|_| panic!("Invalid {prefix}_MAX_FILE_SIZE")),
-        max_number_of_processes: env::var(format!("{prefix}_MAX_NUMBER_OF_PROCESSES"))
-            .unwrap_or_else(|_| {
-                panic!("Missing {prefix}_MAX_NUMBER_OF_PROCESSES environment variable")
-            })
-            .parse()
-            .unwrap_or_else(|_| panic!("Invalid {prefix}_MAX_NUMBER_OF_PROCESSES")),
+        wall_time: get_mandatory_parsed_env_var(&format!("{prefix}_WALL_TIME")),
+        cpu_time: get_mandatory_parsed_env_var(&format!("{prefix}_CPU_TIME")),
+        memory: get_mandatory_parsed_env_var(&format!("{prefix}_MEMORY")),
+        extra_time: get_mandatory_parsed_env_var(&format!("{prefix}_EXTRA_TIME")),
+        max_open_files: get_mandatory_parsed_env_var(&format!("{prefix}_MAX_OPEN_FILES")),
+        max_file_size: get_mandatory_parsed_env_var(&format!("{prefix}_MAX_FILE_SIZE")),
+        max_number_of_processes: get_mandatory_parsed_env_var(&format!(
+            "{prefix}_MAX_NUMBER_OF_PROCESSES"
+        )),
     }
 }
 
@@ -70,20 +62,6 @@ fn check_and_get_system_limits() -> SystemLimits {
         compile: get_limits_from_env_var("COMPILE"),
         run: get_limits_from_env_var("RUN"),
     }
-}
-
-fn get_whole_seconds_or_set_default(env_var: &str, default: WholeSeconds) -> WholeSeconds {
-    env::var(env_var)
-        .unwrap_or_else(|_| {
-            eprintln!(
-                "Could not find {env_var} environment variable, defaulting to {default} seconds"
-            );
-            default.to_string()
-        })
-        .parse()
-        .unwrap_or_else(|_| {
-            panic!("Invalid {env_var}");
-        })
 }
 
 async fn get_health() -> Response<Body> {
@@ -131,13 +109,11 @@ fn get_runtimes() -> Metadata {
 
 #[tokio::main]
 async fn main() {
-    let installation_timeout = get_whole_seconds_or_set_default("INSTALLATION_TIMEOUT", 120);
-    let update_timeout = get_whole_seconds_or_set_default("UPDATE_TIMEOUT", 240);
+    let installation_timeout: WholeSeconds = get_mandatory_parsed_env_var("INSTALLATION_TIMEOUT");
+    let update_timeout: WholeSeconds = get_mandatory_parsed_env_var("UPDATE_TIMEOUT");
     let system_limits = check_and_get_system_limits();
-    let max_concurrent_submissions: usize = env::var("MAX_CONCURRENT_SUBMISSIONS")
-        .unwrap_or_else(|_| panic!("Missing MAX_CONCURRENT_SUBMISSIONS environment variable"))
-        .parse()
-        .unwrap_or_else(|e| panic!("Invalid MAX_CONCURRENT_SUBMISSIONS: {e}"));
+    let max_concurrent_submissions: usize =
+        get_mandatory_parsed_env_var("MAX_CONCURRENT_SUBMISSIONS");
     let execution_semaphore = Arc::new(Semaphore::new(max_concurrent_submissions));
 
     let box_id = Arc::new(AtomicU64::new(0));

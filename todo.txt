@@ -1,2 +1,1 @@
-- Remove INSTALLATION_TIMEOUT, UPDATE_TIMEOUT defaults?
 - Proper logging
