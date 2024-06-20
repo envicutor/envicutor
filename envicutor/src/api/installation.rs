@@ -80,7 +80,7 @@ pub async fn install_runtime(
 
     let current_box_id = get_next_box_id(&box_id);
 
-    let workdir = TempDir::new(format!("/tmp/{current_box_id}"))
+    let workdir = TempDir::new(format!("/tmp/{current_box_id}-submission"))
         .await
         .map_err(|e| {
             eprintln!("Failed to create workdir: {e}");

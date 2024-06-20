@@ -22,7 +22,7 @@ use crate::{
     isolate::{Isolate, StageResult},
     limits::{GetLimits, Limits, SystemLimits},
     strings::NewLine,
-    temp_dir::TempDir,
+    temp_box::TempBox,
     types::Metadata,
 };
 
@@ -83,12 +83,10 @@ pub async fn execute(
     }
 
     let current_box_id = get_next_box_id(&box_id);
-    let workdir = TempDir::new(format!("/tmp/{current_box_id}"))
-        .await
-        .map_err(|e| {
-            eprintln!("Failed to create temp directory (workdir): {e}");
-            INTERNAL_SERVER_ERROR_RESPONSE.into_response()
-        })?;
+    let workdir = TempBox::new(current_box_id).await.map_err(|e| {
+        eprintln!("Failed to create temp directory (workdir): {e}");
+        INTERNAL_SERVER_ERROR_RESPONSE.into_response()
+    })?;
     fs::set_permissions(&workdir.path, Permissions::from_mode(0o777))
         .await
         .map_err(|e| {

@@ -276,4 +276,44 @@ int main()x {
     const body = JSON.parse(text);
     assert.equal(body.run.exit_code, 1);
   }
+
+  {
+    console.log('Installing Bash');
+    const res = await sendRequest('POST', `${BASE_URL}/runtimes`, {
+      name: 'Bash',
+      nix_shell: `
+{ pkgs ? import (
+  fetchTarball {
+    url="https://github.com/NixOS/nixpkgs/archive/72da83d9515b43550436891f538ff41d68eecc7f.tar.gz";
+    sha256="177sws22nqkvv8am76qmy9knham2adfh3gv7hrjf6492z1mvy02y";
+  }
+) {} }:
+pkgs.mkShell {
+  nativeBuildInputs = with pkgs; [
+      bash
+  ];
+}`,
+      compile_script: '',
+      run_script: 'bash main.sh',
+      source_file_name: 'main.sh'
+    });
+
+    console.log(await res.text());
+    assert.equal(res.status, 200);
+  }
+
+  // https://github.com/ioi/isolate/issues/158
+  {
+    console.log('Creating a directory that can not be removed (Envicutor shall remove it)');
+    const res = await sendRequest('POST', `${BASE_URL}/execute`, {
+      runtime_id: 4,
+      source_code: 'mkdir test && chmod 0700 test && touch test/some-file && echo directory created'
+    });
+
+    const text = await res.text();
+    console.log(text);
+    assert.equal(res.status, 200);
+    const body = JSON.parse(text);
+    assert.equal(body.run.stdout, 'directory created\n');
+  }
 })();

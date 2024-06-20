@@ -5,7 +5,7 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/app/target \
     cargo build --release && \
     mkdir /release && \
-    cp -r ./target/release/envicutor /release/envicutor
+    cp ./target/release/envicutor ./target/release/delete_submission /release
 
 FROM buildpack-deps@sha256:d56cd472000631b8faca51f40d4e3f1b20deffa588f9f207fa6c60efb62ba7c4 AS isolate
 RUN apt-get update && \
@@ -24,9 +24,9 @@ RUN useradd -m envicutor && \
     apt-get update && \
     apt-get install -y sqlite3 curl xz-utils && \
     install -d -m755 -o envicutor -g envicutor /nix
-COPY --from=build /release/envicutor /envicutor/app
+COPY --from=build /release/envicutor /release/delete_submission /envicutor/
 COPY --from=isolate /usr/local/bin/isolate /usr/local/bin
 COPY --from=isolate /usr/local/etc/isolate /usr/local/etc/isolate
 COPY ./setup-cgroup.sh ./setup-nix-and-db.sh ./db.sql /envicutor
-# Using the Docker USER instruction leads to an intensive loop in nix's installation script. I SIMPLY DON'T UNDERSTAND WHY
+RUN chmod u+s /envicutor/delete_submission
 CMD ["/envicutor/setup-cgroup.sh"]
