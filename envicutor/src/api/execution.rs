@@ -156,18 +156,6 @@ pub async fn execute(
         None
     };
 
-    let next_box_id = get_next_box_id(&box_id);
-    let run_sandbox = Isolate::init(next_box_id).await.map_err(|e| {
-        eprintln!("Failed to initialize run sandbox: {e}");
-        INTERNAL_SERVER_ERROR_RESPONSE.into_response()
-    })?;
-    let stdin = if let Some(mut s) = req.input {
-        s.add_new_line_if_none();
-        Some(s)
-    } else {
-        None
-    };
-
     // If there is a compile_result and its exit_code is 0 or there isn't a compile_result, run
     let should_run = if let Some(cs) = &compile_result {
         if cs.exit_code == Some(0) {
@@ -180,6 +168,18 @@ pub async fn execute(
     };
 
     let run_result = if should_run {
+        let next_box_id = get_next_box_id(&box_id);
+        let run_sandbox = Isolate::init(next_box_id).await.map_err(|e| {
+            eprintln!("Failed to initialize run sandbox: {e}");
+            INTERNAL_SERVER_ERROR_RESPONSE.into_response()
+        })?;
+        let stdin = if let Some(mut s) = req.input {
+            s.add_new_line_if_none();
+            Some(s)
+        } else {
+            None
+        };
+
         Some(
             run_sandbox
                 .run(

@@ -5,12 +5,12 @@ use tokio::{fs, io::AsyncWriteExt, process::Command};
 
 use crate::{
     limits::MandatoryLimits,
-    temp_dir::TempDir,
     types::{Kilobytes, Seconds},
 };
 
 pub struct Isolate {
     box_id: u64,
+    metadata_file_path: String,
 }
 
 #[derive(serde::Serialize)]
@@ -55,7 +55,10 @@ impl Isolate {
             ));
         }
 
-        Ok(Isolate { box_id })
+        Ok(Isolate {
+            box_id,
+            metadata_file_path: format!("/tmp/{box_id}-metadata.txt"),
+        })
     }
 
     pub async fn run(
@@ -66,20 +69,9 @@ impl Isolate {
         workdir: &str,
         cmd_args: &[&str],
     ) -> Result<StageResult, Error> {
-        let metadata_dir = TempDir::new(format!("/tmp/{}-metadata", self.box_id))
-            .await
-            .map_err(|e| {
-                anyhow!(
-                    "Failed to create metadata temp directory at /tmp/{}-metadata\nError: {}",
-                    self.box_id,
-                    e
-                )
-            })?;
-
-        let metadata_file_path = format!("{}/metadata.txt", metadata_dir.path);
         let mut cmd = Command::new("isolate");
         cmd.arg("--run")
-            .arg(&format!("--meta={}", metadata_file_path))
+            .arg(&format!("--meta={}", self.metadata_file_path))
             .arg("--cg")
             .arg("-s")
             .args(["-c", workdir])
@@ -129,12 +121,12 @@ impl Isolate {
         let stdout = String::from_utf8_lossy(&cmd_res.stdout).to_string();
         let stderr = String::from_utf8_lossy(&cmd_res.stderr).to_string();
 
-        let metadata_str = fs::read_to_string(&metadata_file_path)
+        let metadata_str = fs::read_to_string(&self.metadata_file_path)
             .await
             .map_err(|e| {
                 anyhow!(
                     "Error reading metadata file: {}\nError: {}\nIsolate run stdout: {}\nIsolate run stderr: {}",
-                    metadata_file_path,
+                    self.metadata_file_path,
                     e,
                     stdout,
                     stderr
@@ -206,6 +198,7 @@ impl Isolate {
 impl Drop for Isolate {
     fn drop(&mut self) {
         let box_id = self.box_id;
+        let metadata_dir = (&self.metadata_file_path).clone();
         tokio::spawn(async move {
             let res = Command::new("isolate")
                 .args(["--cleanup", "--cg", &format!("-b{}", box_id)])
@@ -224,6 +217,10 @@ impl Drop for Isolate {
                 Err(e) => {
                     eprintln!("Failed to run `isolate --cleanup`\nError: {e}");
                 }
+            }
+            let res = fs::remove_file(&metadata_dir).await;
+            if let Err(e) = res {
+                eprintln!("Failed to remove: {metadata_dir}\nError: {e}");
             }
         });
     }

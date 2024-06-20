@@ -3,6 +3,7 @@
     - Drawbacks
       - Performance loss if /tmp and /var are on different file systems
       - Inability to clean up if dir is created while another one with the same name exists
+        - Or at initial startup
   - Opt 2: setuid script to remove submission dir
     - Drawbacks
       - Needs to be secure and stored in a directory that is not accessible to the sandbox
