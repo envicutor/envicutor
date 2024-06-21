@@ -10,7 +10,10 @@ const { sendRequest, BASE_URL, sleep } = require('./common');
       promises.push(
         sendRequest('POST', `${BASE_URL}/execute`, {
           runtime_id: 2,
-          source_code: 'print(input())',
+          source_code: `
+import time
+time.sleep(0.5)
+print(input())`,
           input: 'Hello world'
         })
       );
@@ -26,12 +29,12 @@ const { sendRequest, BASE_URL, sleep } = require('./common');
     }
     const total_time = after - before;
     console.log(`Approximate time to run all submissions: ${total_time} ms`);
-    assert.ok(total_time < 1000, 'Total time was more than 1 second');
+    assert.ok(total_time < 1200, 'Total time was more than 1.2 seconds');
   }
 
   {
     console.log(
-      'Executing 128 Python submissions in parallel (should be around 2 seconds if max concurrent submissions is 64)'
+      'Executing 128 Python submissions in parallel (the second 64 should be blocked for some time)'
     );
     const promises = [];
     const before = new Date();
@@ -41,7 +44,7 @@ const { sendRequest, BASE_URL, sleep } = require('./common');
           runtime_id: 2,
           source_code: `
 import time
-time.sleep(1)`
+time.sleep(0.5)`
         })
       );
     }
@@ -56,12 +59,9 @@ time.sleep(1)`
     }
     const total_time = after - before;
     console.log(`Approximate time to run all submissions: ${total_time} ms`);
-    assert.ok(total_time < 3200, 'Total time was more than 3.2 seconds');
+    assert.ok(total_time < 2000, 'Total time was more than 2 seconds');
   }
 
-  // Have installation running that takes a second and fails
-  // Have 32 submissions that take a second running at the same time of the installation
-  // Check that each submission finished after two seconds
   {
     console.log(
       'Executing 32 submissions after a package installation has started (they should start after the installation)'
@@ -76,7 +76,7 @@ time.sleep(1)`
 ) {} }:
 pkgs.mkShell {
   shellHook = ''
-  sleep 1
+  sleep 0.5
   exit 1
   '';
   nativeBuildInputs = with pkgs; [];
@@ -97,7 +97,7 @@ pkgs.mkShell {
             runtime_id: 2,
             source_code: `
 import time
-time.sleep(1)`
+time.sleep(0.5)`
           });
           return new Date() - start;
         })()
@@ -107,14 +107,11 @@ time.sleep(1)`
     const durations = await Promise.all(promises);
     const total_time = new Date() - before;
     for (const duration of durations) {
-      assert.ok(duration >= 2000, 'Found a submission that finished before two seconds');
+      assert.ok(duration >= 1000, 'Found a submission that finished before one second');
     }
     console.log(`Approximate time to run all submissions: ${total_time} ms`);
   }
 
-  // Have 32 submissions that take a second running at the same time of the installation
-  // Have installation running that takes a second and fails
-  // Check that the installation finished after two seconds
   {
     console.log(
       'Running a package installation after executing 32 submissions has started (it should start after the executions finish)'
@@ -127,7 +124,7 @@ time.sleep(1)`
           runtime_id: 2,
           source_code: `
 import time
-time.sleep(1)`
+time.sleep(0.5)`
         })
       );
     }
@@ -144,7 +141,7 @@ time.sleep(1)`
 ) {} }:
 pkgs.mkShell {
   shellHook = ''
-  sleep 1
+  sleep 0.5
   exit 1
   '';
   nativeBuildInputs = with pkgs; [];
@@ -156,12 +153,9 @@ pkgs.mkShell {
 
     const duration = new Date() - start;
     console.log(`Time to finish installation: ${duration}`);
-    assert.ok(duration >= 2000, 'Installation finished before 2 seconds');
+    assert.ok(duration >= 1000, 'Installation finished before 1 second');
   }
 
-  // Have installation running that takes a second and fails
-  // Have another installation running that takes a second and fails
-  // Check that the second installation finished after two seconds
   {
     console.log(
       'Running a package installation after another installation has started (it should start after the installation finishes)'
@@ -177,7 +171,7 @@ pkgs.mkShell {
 ) {} }:
 pkgs.mkShell {
   shellHook = ''
-  sleep 1
+  sleep 0.5
   exit 1
   '';
   nativeBuildInputs = with pkgs; [];
@@ -199,7 +193,7 @@ pkgs.mkShell {
 ) {} }:
 pkgs.mkShell {
   shellHook = ''
-  sleep 1
+  sleep 0.5
   exit 1
   '';
   nativeBuildInputs = with pkgs; [];
@@ -211,6 +205,6 @@ pkgs.mkShell {
 
     const duration = new Date() - start;
     console.log(`Time to finish second installation: ${duration}`);
-    assert.ok(duration >= 2000, 'Second installation finished before 2 seconds');
+    assert.ok(duration >= 1000, 'Second installation finished before one second');
   }
 })();
