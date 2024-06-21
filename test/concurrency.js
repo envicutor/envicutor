@@ -114,7 +114,7 @@ time.sleep(1)`
 
   // Have 32 submissions that take a second running at the same time of the installation
   // Have installation running that takes a second and fails
-  // Check that each submission finished after two seconds
+  // Check that the installation finished after two seconds
   {
     console.log(
       'Running a package installation after executing 32 submissions has started (it should start after the executions finish)'
@@ -157,5 +157,60 @@ pkgs.mkShell {
     const duration = new Date() - start;
     console.log(`Time to finish installation: ${duration}`);
     assert.ok(duration >= 2000, 'Installation finished before 2 seconds');
+  }
+
+  // Have installation running that takes a second and fails
+  // Have another installation running that takes a second and fails
+  // Check that the second installation finished after two seconds
+  {
+    console.log(
+      'Running a package installation after another installation has started (it should start after the installation finishes)'
+    );
+
+    sendRequest('POST', `${BASE_URL}/runtimes`, {
+      name: 'Fake lang',
+      nix_shell: `{ pkgs ? import (
+  fetchTarball {
+    url="https://github.com/NixOS/nixpkgs/archive/72da83d9515b43550436891f538ff41d68eecc7f.tar.gz";
+    sha256="177sws22nqkvv8am76qmy9knham2adfh3gv7hrjf6492z1mvy02y";
+  }
+) {} }:
+pkgs.mkShell {
+  shellHook = ''
+  sleep 1
+  exit 1
+  '';
+  nativeBuildInputs = with pkgs; [];
+}`,
+      compile_script: 'g++ main.cpp',
+      run_script: './a.out',
+      source_file_name: 'main.cpp'
+    });
+    await sleep(10);
+
+    const start = new Date();
+    await sendRequest('POST', `${BASE_URL}/runtimes`, {
+      name: 'Fake lang',
+      nix_shell: `{ pkgs ? import (
+  fetchTarball {
+    url="https://github.com/NixOS/nixpkgs/archive/72da83d9515b43550436891f538ff41d68eecc7f.tar.gz";
+    sha256="177sws22nqkvv8am76qmy9knham2adfh3gv7hrjf6492z1mvy02y";
+  }
+) {} }:
+pkgs.mkShell {
+  shellHook = ''
+  sleep 1
+  exit 1
+  '';
+  nativeBuildInputs = with pkgs; [];
+}`,
+      compile_script: 'g++ main.cpp',
+      run_script: './a.out',
+      source_file_name: 'main.cpp'
+    });
+
+    const duration = new Date() - start;
+    console.log(`Time to finish second installation: ${duration}`);
+    assert.ok(duration >= 2000, 'Second installation finished before 2 seconds');
   }
 })();
