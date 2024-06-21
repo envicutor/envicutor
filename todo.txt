@@ -1,4 +1,4 @@
-- Test that installation is stopped if there are running processes
 - Test that installation is stopped if there is a running installation
+- Test multiple concurrent compiled language submissions
 - Limit tests
 - Proper logging
