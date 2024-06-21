@@ -64,6 +64,51 @@ time.sleep(0.5)`
 
   {
     console.log(
+      'Executing 128 C++ submissions in parallel (the second 64 should be blocked for some time)'
+    );
+    const promises_1 = [];
+    const before_1 = new Date();
+    for (let i = 0; i < 64; ++i) {
+      promises_1.push(
+        (async () => {
+          await sendRequest('POST', `${BASE_URL}/execute`, {
+            runtime_id: 3,
+            source_code: `int main() {
+  return 0;
+}`
+          });
+          return new Date() - before_1;
+        })()
+      );
+    }
+
+    const promises_2 = [];
+    const before_2 = new Date();
+    for (let i = 0; i < 64; ++i) {
+      promises_2.push(
+        (async () => {
+          await sendRequest('POST', `${BASE_URL}/execute`, {
+            runtime_id: 3,
+            source_code: `int main() {
+  return 0;
+}`
+          });
+          return new Date() - before_2;
+        })()
+      );
+    }
+
+    const durations_1 = await Promise.all(promises_1);
+    const min_1 = Math.min(...durations_1);
+    const durations_2 = await Promise.all(promises_2);
+    assert.ok(
+      !durations_2.some((x) => x < min_1),
+      'A submission in the second bulk started before the first submission that finished in the first bulk'
+    );
+  }
+
+  {
+    console.log(
       'Executing 32 submissions after a package installation has started (they should start after the installation)'
     );
     sendRequest('POST', `${BASE_URL}/runtimes`, {
