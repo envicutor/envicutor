@@ -316,4 +316,67 @@ pkgs.mkShell {
     const body = JSON.parse(text);
     assert.equal(body.run.stdout, 'directory created\n');
   }
+
+  {
+    console.log('Executing over cpu time limit Python code');
+    const res = await sendRequest('POST', `${BASE_URL}/execute`, {
+      runtime_id: 2,
+      source_code: `
+x = 0
+while True:
+  x += 1
+`,
+      run_limits: {
+        cpu_time: 0.1,
+        extra_time: 0
+      }
+    });
+
+    const text = await res.text();
+    console.log(text);
+    assert.equal(res.status, 200);
+    const body = JSON.parse(text);
+    assert.equal(body.run.exit_status, 'TO');
+  }
+
+  {
+    console.log('Executing over wall time limit Python code');
+    const res = await sendRequest('POST', `${BASE_URL}/execute`, {
+      runtime_id: 2,
+      source_code: `
+import time
+time.sleep(3)`,
+      run_limits: {
+        wall_time: 0.3,
+        extra_time: 0
+      }
+    });
+
+    const text = await res.text();
+    console.log(text);
+    assert.equal(res.status, 200);
+    const body = JSON.parse(text);
+    assert.equal(body.run.exit_status, 'TO');
+  }
+
+  {
+    console.log('Executing over number of processes limit Python code');
+    const res = await sendRequest('POST', `${BASE_URL}/execute`, {
+      runtime_id: 2,
+      source_code: `
+import os
+
+while True:
+    os.fork()`,
+      run_limits: {
+        max_number_of_processes: 4
+      }
+    });
+
+    const text = await res.text();
+    console.log(text);
+    assert.equal(res.status, 200);
+    const body = JSON.parse(text);
+    assert.equal(body.run.exit_code, 1);
+  }
 })();

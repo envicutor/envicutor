@@ -171,10 +171,9 @@ impl Isolate {
             }
         }
 
-        // Might be an error in the actual isolate command
-        if !cmd_res.status.success() && exit_code.is_none() {
+        if exit_status == Some("XX".to_string()) {
             return Err(anyhow!(
-                "isolate --run exited with error code but exit code was not found in metadata\nstdout: {}\nstderr: {}",
+                "Failed to run isolate --run\nstdout: {}\nstderr: {}",
                 stdout,
                 stderr
             ));

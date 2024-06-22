@@ -29,7 +29,7 @@ print(input())`,
     }
     const total_time = after - before;
     console.log(`Approximate time to run all submissions: ${total_time} ms`);
-    assert.ok(total_time < 1200, 'Total time was more than 1.2 seconds');
+    assert.ok(total_time >= 500 && total_time < 1200, 'Total time was more than 1.2 seconds');
   }
 
   {
@@ -56,55 +56,45 @@ time.sleep(0.5)`
       const body = JSON.parse(text);
       assert.equal(body.run.stdout, '');
       assert.equal(body.run.stderr, '');
+      assert.equal(body.run.exit_code, 0);
     }
     const total_time = after - before;
     console.log(`Approximate time to run all submissions: ${total_time} ms`);
-    assert.ok(total_time < 2000, 'Total time was more than 2 seconds');
+    assert.ok(total_time >= 1000 && total_time < 2000, 'Invalid total time');
   }
 
   {
     console.log(
       'Executing 128 C++ submissions in parallel (the second 64 should be blocked for some time)'
     );
-    const promises_1 = [];
-    const before_1 = new Date();
-    for (let i = 0; i < 64; ++i) {
-      promises_1.push(
-        (async () => {
-          await sendRequest('POST', `${BASE_URL}/execute`, {
-            runtime_id: 3,
-            source_code: `int main() {
-  return 0;
+    const promises = [];
+    const before = new Date();
+    for (let i = 0; i < 128; ++i) {
+      promises.push(
+        sendRequest('POST', `${BASE_URL}/execute`, {
+          runtime_id: 3,
+          source_code: `
+#include <unistd.h>
+
+int main() {
+    usleep(300000);
+    return 0;
 }`
-          });
-          return new Date() - before_1;
-        })()
+        })
       );
     }
-
-    const promises_2 = [];
-    const before_2 = new Date();
-    for (let i = 0; i < 64; ++i) {
-      promises_2.push(
-        (async () => {
-          await sendRequest('POST', `${BASE_URL}/execute`, {
-            runtime_id: 3,
-            source_code: `int main() {
-  return 0;
-}`
-          });
-          return new Date() - before_2;
-        })()
-      );
+    const responses = await Promise.all(promises);
+    const total_time = new Date() - before;
+    for (const res of responses) {
+      const text = await res.text();
+      assert.equal(res.status, 200);
+      const body = JSON.parse(text);
+      assert.equal(body.run.stdout, '');
+      assert.equal(body.run.stderr, '');
+      assert.equal(body.run.exit_code, 0);
     }
-
-    const durations_1 = await Promise.all(promises_1);
-    const min_1 = Math.min(...durations_1);
-    const durations_2 = await Promise.all(promises_2);
-    assert.ok(
-      !durations_2.some((x) => x < min_1),
-      'A submission in the second bulk started before the first submission that finished in the first bulk'
-    );
+    console.log(`Approximate time to run all submissions: ${total_time} ms`);
+    assert.ok(total_time >= 600 && total_time < 5000, 'Invalid total time');
   }
 
   {
