@@ -1,5 +1,5 @@
 const assert = require('assert');
-const { sendRequest, BASE_URL, sleep } = require('./common');
+const { sendRequest, BASE_URL } = require('./common');
 
 (async () => {
   {
@@ -432,6 +432,27 @@ print(stdout.decode().strip())`,
 s = subprocess.Popen(["echo", "hello"], stdout=subprocess.PIPE)
 stdout, _ = s.communicate()
 print(stdout.decode().strip())`,
+      run_limits: {
+        max_number_of_processes: 1
+      }
+    });
+
+    const text = await res.text();
+    console.log(text);
+    assert.equal(res.status, 200);
+    const body = JSON.parse(text);
+    assert.equal(body.run.exit_code, 1);
+  }
+
+  {
+    console.log('Executing above-number-of-processes-limit python code using threads');
+    const res = await sendRequest('POST', `${BASE_URL}/execute`, {
+      runtime_id: 2,
+      source_code: `import threading
+def test():
+    print("yo")
+t=threading.Thread(target=test)
+t.start()`,
       run_limits: {
         max_number_of_processes: 1
       }

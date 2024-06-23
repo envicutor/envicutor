@@ -1,4 +1,3 @@
-- Limit tests
 - Test setting invalid limits
 - Test stuff that happen at startup
 - Proper logging

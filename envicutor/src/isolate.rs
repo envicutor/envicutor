@@ -1,7 +1,7 @@
 use std::{process::Stdio, time::Duration};
 
 use anyhow::{anyhow, Error};
-use tokio::{fs, io::AsyncWriteExt, process::Command, time};
+use tokio::{fs, io::AsyncWriteExt, process::Command, task::yield_now, time};
 
 use crate::{
     limits::MandatoryLimits,
@@ -49,6 +49,7 @@ async fn add_env_vars_from_file(cmd: &mut Command, file_path: &str) -> Result<()
         .map_err(|e| anyhow!("Failed to read environment variables from: {file_path}: {e}"))?;
     let lines = env.lines();
 
+    let mut line_count = 0;
     let mut key = String::new();
     let mut value = String::new();
     for line in lines {
@@ -72,6 +73,10 @@ async fn add_env_vars_from_file(cmd: &mut Command, file_path: &str) -> Result<()
         } else {
             value.push('\n');
             value.push_str(line);
+        }
+        line_count += 1;
+        if line_count % 500 == 0 {
+            yield_now().await;
         }
     }
     cmd.env(&key, &value);
