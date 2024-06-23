@@ -115,7 +115,7 @@ pub async fn install_runtime(
         .arg(format!("{NIX_BIN_PATH}/nix-shell"))
         .args(["--timeout".to_string(), installation_timeout.to_string()])
         .arg(nix_shell_path)
-        .args(["--run", "/bin/bash -c export"]);
+        .args(["--run", "/bin/bash -c env"]);
     let cmd_res = cmd.output().await.map_err(|e| {
         eprintln!("Failed to run nix-shell: {e}");
         INTERNAL_SERVER_ERROR_RESPONSE.into_response()
@@ -182,7 +182,7 @@ pub async fn install_runtime(
             let compile_script_path = format!("{runtime_dir}/compile");
             crate::fs::write_file_and_set_permissions(
                 &compile_script_path,
-                &req.compile_script,
+                &format!("#!/bin/bash\n\n{}", req.compile_script),
                 Permissions::from_mode(0o755),
             )
             .await
@@ -195,7 +195,7 @@ pub async fn install_runtime(
         let run_script_path = format!("{runtime_dir}/run");
         crate::fs::write_file_and_set_permissions(
             &run_script_path,
-            &req.run_script,
+            &format!("#!/bin/bash\n\n{}", req.run_script),
             Permissions::from_mode(0o755),
         )
         .await

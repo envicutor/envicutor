@@ -1,7 +1,7 @@
-use std::process::Stdio;
+use std::{process::Stdio, time::Duration};
 
 use anyhow::{anyhow, Error};
-use tokio::{fs, io::AsyncWriteExt, process::Command};
+use tokio::{fs, io::AsyncWriteExt, process::Command, time};
 
 use crate::{
     limits::MandatoryLimits,
@@ -27,6 +27,8 @@ pub struct StageResult {
     pub wall_time: Option<Seconds>,
 }
 
+const ISOLATE_PATH: &str = "/usr/local/bin/isolate";
+
 fn split_metadata_line(line: &str) -> (Result<&str, ()>, Result<&str, ()>) {
     let mut entry: Vec<&str> = line.split(':').collect();
     let value = match entry.pop() {
@@ -41,6 +43,41 @@ fn split_metadata_line(line: &str) -> (Result<&str, ()>, Result<&str, ()>) {
     (key, value)
 }
 
+async fn add_env_vars_from_file(cmd: &mut Command, file_path: &str) -> Result<(), Error> {
+    let env = fs::read_to_string(file_path)
+        .await
+        .map_err(|e| anyhow!("Failed to read environment variables from: {file_path}: {e}"))?;
+    let lines = env.lines();
+
+    let mut key = String::new();
+    let mut value = String::new();
+    for line in lines {
+        if line.contains('=') {
+            if !key.is_empty() {
+                cmd.env(&key, &value);
+            }
+            let mut entry: Vec<&str> = line.split('=').collect();
+            value = match entry.pop() {
+                Some(e) => e.to_string(),
+                None => {
+                    return Err(anyhow!("Found a bad line in the env file: {file_path}"));
+                }
+            };
+            key = match entry.pop() {
+                Some(e) => e.to_string(),
+                None => {
+                    return Err(anyhow!("Found a bad line in the env file: {file_path}"));
+                }
+            };
+        } else {
+            value.push('\n');
+            value.push_str(line);
+        }
+    }
+    cmd.env(&key, &value);
+    Ok(())
+}
+
 impl Isolate {
     pub async fn init(box_id: u64) -> Result<Isolate, Error> {
         let isolate = Isolate {
@@ -48,7 +85,7 @@ impl Isolate {
             metadata_file_path: format!("/tmp/{box_id}-metadata.txt"),
             run_pid: None,
         };
-        let res = Command::new("isolate")
+        let res = Command::new(ISOLATE_PATH)
             .args(["--init", "--cg", &format!("-b{}", box_id)])
             .output()
             .await
@@ -70,14 +107,16 @@ impl Isolate {
         limits: &MandatoryLimits,
         stdin: Option<&str>,
         workdir: &str,
+        env_file: &str,
         cmd_args: &[&str],
     ) -> Result<StageResult, Error> {
-        let mut cmd = Command::new("isolate");
+        let mut cmd = Command::new(ISOLATE_PATH);
         cmd.arg("--run")
             .arg(&format!("--meta={}", self.metadata_file_path))
             .arg("--cg")
             .arg("-s")
             .args(["-c", workdir])
+            .arg("-e")
             .args(["-E", "HOME=/tmp"]);
 
         for dir in mounts {
@@ -94,6 +133,8 @@ impl Isolate {
             .arg(format!("-b{}", self.box_id))
             .arg("--")
             .args(cmd_args);
+
+        add_env_vars_from_file(cmd.env_clear(), env_file).await?;
 
         let mut child = cmd
             .stdin(Stdio::piped())
@@ -205,7 +246,7 @@ impl Isolate {
 impl Drop for Isolate {
     fn drop(&mut self) {
         let box_id = self.box_id;
-        let metadata_dir = self.metadata_file_path.clone();
+        let metadata_file_path = self.metadata_file_path.clone();
         let run_pid_opt = self.run_pid;
         tokio::spawn(async move {
             if let Some(run_pid) = run_pid_opt {
@@ -219,6 +260,7 @@ impl Drop for Isolate {
                         "Could not kill `isolate --run` process. Maybe it has already exited: {e}"
                     );
                 }
+                time::sleep(Duration::from_millis(50)).await;
             }
             let res = Command::new("isolate")
                 .args(["--cleanup", "--cg", &format!("-b{}", box_id)])
@@ -238,9 +280,9 @@ impl Drop for Isolate {
                     eprintln!("Failed to run `isolate --cleanup`\nError: {e}");
                 }
             }
-            let res = fs::remove_file(&metadata_dir).await;
+            let res = fs::remove_file(&metadata_file_path).await;
             if let Err(e) = res {
-                eprintln!("Failed to remove: {metadata_dir}\nError: {e}");
+                eprintln!("Failed to remove: {metadata_file_path}\nError: {e}");
             }
         });
     }

@@ -118,12 +118,17 @@ pkgs.mkShell {
   }
 ) {} }:
 pkgs.mkShell {
+  shellHook = ''
+export multiline="multi
+line"
+export spaces="these spaces"
+  '';
   nativeBuildInputs = with pkgs; [
       python3
   ];
 }`,
       compile_script: '',
-      run_script: 'python3 main.py',
+      run_script: 'exec python3 main.py',
       source_file_name: 'main.py'
     });
 
@@ -147,8 +152,8 @@ pkgs.mkShell {
       gcc
   ];
 }`,
-      compile_script: 'g++ main.cpp',
-      run_script: './a.out',
+      compile_script: 'exec g++ main.cpp',
+      run_script: 'exec ./a.out',
       source_file_name: 'main.cpp'
     });
 
@@ -211,6 +216,24 @@ pkgs.mkShell {
     assert.equal(res.status, 200);
     const body = JSON.parse(text);
     assert.equal(body.run.stdout, 'Hello world\n');
+    assert.equal(body.run.stderr, '');
+  }
+
+  {
+    console.log('Checking the environment variables in Python');
+    const res = await sendRequest('POST', `${BASE_URL}/execute`, {
+      runtime_id: 2,
+      source_code: `import os
+print(os.environ["multiline"] == "multi\\nline")
+print(os.environ["spaces"] == "these spaces")
+`,
+    });
+
+    const text = await res.text();
+    console.log(text);
+    assert.equal(res.status, 200);
+    const body = JSON.parse(text);
+    assert.equal(body.run.stdout, 'True\nTrue\n');
     assert.equal(body.run.stderr, '');
   }
 

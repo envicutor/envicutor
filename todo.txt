@@ -1,2 +1,3 @@
 - Limit tests
+- Test stuff that happen at startup
 - Proper logging
