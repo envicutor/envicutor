@@ -262,7 +262,7 @@ impl Drop for Isolate {
                 }
                 time::sleep(Duration::from_millis(50)).await;
             }
-            let res = Command::new("isolate")
+            let res = Command::new(ISOLATE_PATH)
                 .args(["--cleanup", "--cg", &format!("-b{}", box_id)])
                 .output()
                 .await;
