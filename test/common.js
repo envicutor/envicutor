@@ -1,6 +1,7 @@
-module.exports.sendRequest = (method, url, body) => {
+module.exports.sendRequest = (method, url, body, signal) => {
   const opts = {
     method,
+    signal,
     headers: {
       'Content-Type': 'application/json'
     }

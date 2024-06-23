@@ -131,7 +131,7 @@ pub async fn execute(
     ];
 
     let compile_result = if runtime.is_compiled {
-        let compile_sandbox = Isolate::init(current_box_id).await.map_err(|e| {
+        let mut compile_sandbox = Isolate::init(current_box_id).await.map_err(|e| {
             eprintln!("Failed to initialize compile sandbox: {e}");
             INTERNAL_SERVER_ERROR_RESPONSE.into_response()
         })?;
@@ -156,18 +156,14 @@ pub async fn execute(
 
     // If there is a compile_result and its exit_code is 0 or there isn't a compile_result, run
     let should_run = if let Some(cs) = &compile_result {
-        if cs.exit_code == Some(0) {
-            true
-        } else {
-            false
-        }
+        cs.exit_code == Some(0)
     } else {
         true
     };
 
     let run_result = if should_run {
         let next_box_id = get_next_box_id(&box_id);
-        let run_sandbox = Isolate::init(next_box_id).await.map_err(|e| {
+        let mut run_sandbox = Isolate::init(next_box_id).await.map_err(|e| {
             eprintln!("Failed to initialize run sandbox: {e}");
             INTERNAL_SERVER_ERROR_RESPONSE.into_response()
         })?;

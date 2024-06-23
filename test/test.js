@@ -1,5 +1,5 @@
 const assert = require('assert');
-const { sendRequest, BASE_URL } = require('./common');
+const { sendRequest, BASE_URL, sleep } = require('./common');
 
 (async () => {
   {
@@ -318,7 +318,7 @@ pkgs.mkShell {
   }
 
   {
-    console.log('Executing over cpu time limit Python code');
+    console.log('Executing over-cpu-time-limit Python code');
     const res = await sendRequest('POST', `${BASE_URL}/execute`, {
       runtime_id: 2,
       source_code: `
@@ -340,7 +340,7 @@ while True:
   }
 
   {
-    console.log('Executing over wall time limit Python code');
+    console.log('Executing over-wall-time-limit Python code');
     const res = await sendRequest('POST', `${BASE_URL}/execute`, {
       runtime_id: 2,
       source_code: `
@@ -360,7 +360,7 @@ time.sleep(3)`,
   }
 
   {
-    console.log('Executing over number of processes limit Python code');
+    console.log('Executing over-number-of-processes-limit Python code');
     const res = await sendRequest('POST', `${BASE_URL}/execute`, {
       runtime_id: 2,
       source_code: `
@@ -378,5 +378,30 @@ while True:
     assert.equal(res.status, 200);
     const body = JSON.parse(text);
     assert.equal(body.run.exit_code, 1);
+  }
+
+  {
+    console.log('Aborting mid-submission (should not cause Envicutor errors)');
+    const controller = new AbortController();
+
+    setTimeout(() => {
+      controller.abort();
+    }, 20);
+
+    try {
+      await sendRequest(
+        'POST',
+        `${BASE_URL}/execute`,
+        {
+          runtime_id: 2,
+          source_code: `
+  import time
+
+  time.sleep(5)
+  `
+        },
+        controller.signal
+      );
+    } catch (e) {}
   }
 })();

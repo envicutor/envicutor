@@ -11,6 +11,7 @@ use crate::{
 pub struct Isolate {
     box_id: u64,
     metadata_file_path: String,
+    run_pid: Option<u32>,
 }
 
 #[derive(serde::Serialize)]
@@ -42,6 +43,11 @@ fn split_metadata_line(line: &str) -> (Result<&str, ()>, Result<&str, ()>) {
 
 impl Isolate {
     pub async fn init(box_id: u64) -> Result<Isolate, Error> {
+        let isolate = Isolate {
+            box_id,
+            metadata_file_path: format!("/tmp/{box_id}-metadata.txt"),
+            run_pid: None,
+        };
         let res = Command::new("isolate")
             .args(["--init", "--cg", &format!("-b{}", box_id)])
             .output()
@@ -55,14 +61,11 @@ impl Isolate {
             ));
         }
 
-        Ok(Isolate {
-            box_id,
-            metadata_file_path: format!("/tmp/{box_id}-metadata.txt"),
-        })
+        Ok(isolate)
     }
 
     pub async fn run(
-        &self,
+        &mut self,
         mounts: &[&str],
         limits: &MandatoryLimits,
         stdin: Option<&str>,
@@ -98,6 +101,10 @@ impl Isolate {
             .stderr(Stdio::piped())
             .spawn()
             .map_err(|e| anyhow!("Failed to spawn isolate --run child process: {e}"))?;
+
+        if let Some(pid) = child.id() {
+            self.run_pid = Some(pid);
+        }
         if let Some(stdin) = stdin {
             if let Some(mut stdin_handle) = child.stdin.take() {
                 stdin_handle
@@ -110,6 +117,7 @@ impl Isolate {
             .wait_with_output()
             .await
             .map_err(|e| anyhow!("Failed to get `isolate --run` output\nError: {e}"))?;
+        self.run_pid = None;
 
         let mut memory: Option<Kilobytes> = None;
         let mut exit_code: Option<u32> = None;
@@ -197,8 +205,21 @@ impl Isolate {
 impl Drop for Isolate {
     fn drop(&mut self) {
         let box_id = self.box_id;
-        let metadata_dir = (&self.metadata_file_path).clone();
+        let metadata_dir = self.metadata_file_path.clone();
+        let run_pid_opt = self.run_pid;
         tokio::spawn(async move {
+            if let Some(run_pid) = run_pid_opt {
+                let kill_res = Command::new("/bin/kill")
+                    .arg("-9")
+                    .arg(run_pid.to_string())
+                    .output()
+                    .await;
+                if let Err(e) = kill_res {
+                    eprintln!(
+                        "Could not kill `isolate --run` process. Maybe it has already exited: {e}"
+                    );
+                }
+            }
             let res = Command::new("isolate")
                 .args(["--cleanup", "--cg", &format!("-b{}", box_id)])
                 .output()
