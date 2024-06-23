@@ -1,7 +1,10 @@
 .PHONY: test
 
-start:
+start-no-logs:
 	docker compose up -d --build
+
+start:
+	make start-no-logs
 	make logs
 
 logs:
@@ -20,5 +23,10 @@ test:
 	make stop-test
 	make stop
 	make migrate
-	docker compose --profile test up -d --build
-	docker compose --profile test logs -f
+	make start-no-logs
+	docker compose --profile test run --build test "installation.js"
+	docker compose --profile test run test "simple.js"
+	make stop
+	docker compose --profile test run test "simple.js"
+	docker compose --profile test run test "complex.js"
+	docker compose --profile test run test "concurrency.js"

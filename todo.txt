@@ -1,3 +1,9 @@
 - Test setting invalid limits
 - Test stuff that happen at startup
+  - Need to stop and start envicutor
+  - Need to run envicutor on the same tests that check the existing runtimes and run simple code
+
+  - Don't do splitting logic in docker entrypoint, but in makefile
+  - Stop and start envicutor after the split that checks simple code and runtimes and restart that split
 - Proper logging
+- More limit tests
