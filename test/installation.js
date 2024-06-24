@@ -185,6 +185,6 @@ pkgs.mkShell {
     });
 
     console.log(await res.text());
-    assert.equal(res.status, 200);
+    assert.equal(res.status, 400);
   }
 })();

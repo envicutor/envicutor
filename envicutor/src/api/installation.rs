@@ -122,8 +122,9 @@ pub async fn install_runtime(
     })?;
     let stdout = String::from_utf8_lossy(&cmd_res.stdout).to_string();
     let stderr = String::from_utf8_lossy(&cmd_res.stderr).to_string();
+    let success = cmd_res.status.success();
 
-    if cmd_res.status.success() {
+    if success {
         let runtime_name = req.name.clone();
         let source_file_name = req.source_file_name.clone();
 
@@ -235,7 +236,12 @@ pub async fn install_runtime(
         trx.commit();
     }
 
-    Ok(Json(InstallationResponse { stdout, stderr }).into_response())
+    let status_code = if success {
+        StatusCode::OK
+    } else {
+        StatusCode::BAD_REQUEST
+    };
+    Ok((status_code, Json(InstallationResponse { stdout, stderr })).into_response())
 }
 
 pub async fn update_nix(
