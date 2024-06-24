@@ -12,6 +12,7 @@ pub struct Isolate {
     box_id: u64,
     metadata_file_path: String,
     run_pid: Option<u32>,
+    pub box_dir: String,
 }
 
 #[derive(serde::Serialize)]
@@ -85,11 +86,6 @@ async fn add_env_vars_from_file(cmd: &mut Command, file_path: &str) -> Result<()
 
 impl Isolate {
     pub async fn init(box_id: u64) -> Result<Isolate, Error> {
-        let isolate = Isolate {
-            box_id,
-            metadata_file_path: format!("/tmp/{box_id}-metadata.txt"),
-            run_pid: None,
-        };
         let res = Command::new(ISOLATE_PATH)
             .args(["--init", "--cg", &format!("-b{}", box_id)])
             .output()
@@ -102,8 +98,12 @@ impl Isolate {
                 String::from_utf8_lossy(&res.stdout),
             ));
         }
-
-        Ok(isolate)
+        Ok(Isolate {
+            box_id,
+            metadata_file_path: format!("/tmp/{box_id}-metadata.txt"),
+            run_pid: None,
+            box_dir: format!("{}/box", String::from_utf8_lossy(&res.stdout).trim()),
+        })
     }
 
     pub async fn run(

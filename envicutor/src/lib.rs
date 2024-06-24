@@ -7,4 +7,3 @@ pub mod globals;
 pub mod types;
 pub mod strings;
 pub mod api;
-pub mod temp_box;

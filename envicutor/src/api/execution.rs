@@ -1,8 +1,4 @@
-use std::{
-    fs::Permissions,
-    os::unix::fs::PermissionsExt,
-    sync::{atomic::AtomicU64, Arc},
-};
+use std::sync::{atomic::AtomicU64, Arc};
 
 use axum::{
     body::Body,
@@ -22,7 +18,6 @@ use crate::{
     isolate::{Isolate, StageResult},
     limits::{GetLimits, Limits, SystemLimits},
     strings::NewLine,
-    temp_box::TempBox,
     types::Metadata,
 };
 
@@ -83,20 +78,6 @@ pub async fn execute(
     }
 
     let current_box_id = get_next_box_id(&box_id);
-    let workdir = TempBox::new(current_box_id).await.map_err(|e| {
-        eprintln!("Failed to create temp directory (workdir): {e}");
-        INTERNAL_SERVER_ERROR_RESPONSE.into_response()
-    })?;
-    fs::set_permissions(&workdir.path, Permissions::from_mode(0o777))
-        .await
-        .map_err(|e| {
-            eprintln!(
-                "Failed to set permissions on: {}\nError: {}",
-                workdir.path, e
-            );
-            INTERNAL_SERVER_ERROR_RESPONSE.into_response()
-        })?;
-
     let runtime = metadata_guard.get(&req.runtime_id).ok_or_else(|| {
         eprintln!(
             "Failed to get runtime info, runtime of id {} does not exist in the cache",
@@ -105,16 +86,27 @@ pub async fn execute(
         INTERNAL_SERVER_ERROR_RESPONSE.into_response()
     })?;
 
+    let mut execution_box = Isolate::init(current_box_id).await.map_err(|e| {
+        eprintln!("Failed to initialize sandbox: {e}");
+        INTERNAL_SERVER_ERROR_RESPONSE.into_response()
+    })?;
+    fs::create_dir(format!("{}/submission", &execution_box.box_dir))
+        .await
+        .map_err(|e| {
+            eprintln!("Failed to create submission directory: {e}");
+            INTERNAL_SERVER_ERROR_RESPONSE.into_response()
+        })?;
+
     req.source_code.add_new_line_if_none();
     fs::write(
-        format!("{}/{}", workdir.path, runtime.source_file_name),
+        format!("{}/submission/{}", execution_box.box_dir, runtime.source_file_name),
         &req.source_code,
     )
     .await
     .map_err(|e| {
         eprintln!(
-            "Failed to write the source code in {}\nError: {}",
-            workdir.path, e
+            "Failed to write the source code in {}: {}",
+            execution_box.box_dir, e
         );
         INTERNAL_SERVER_ERROR_RESPONSE.into_response()
     })?;
@@ -124,76 +116,77 @@ pub async fn execute(
         INTERNAL_SERVER_ERROR_RESPONSE.into_response()
     })?;
     let runtime_dir = format!("{}/{}", RUNTIMES_DIR, req.runtime_id);
-    let mounts = [
-        &format!("/submission={}:rw", workdir.path),
-        "/nix",
-        &format!("/runtime={runtime_dir}"),
-    ];
+    let mounts = ["/nix", &format!("/runtime={runtime_dir}")];
 
     let compile_result = if runtime.is_compiled {
-        let mut compile_sandbox = Isolate::init(current_box_id).await.map_err(|e| {
-            eprintln!("Failed to initialize compile sandbox: {e}");
-            INTERNAL_SERVER_ERROR_RESPONSE.into_response()
-        })?;
-        Some(
-            compile_sandbox
-                .run(
-                    &mounts,
-                    &compile_limits,
-                    None,
-                    "/submission",
-                    &format!("{runtime_dir}/env"),
-                    &["/runtime/compile"],
-                )
-                .await
-                .map_err(|e| {
-                    eprintln!("Failed to compile submission: {e}");
-                    INTERNAL_SERVER_ERROR_RESPONSE.into_response()
-                })?,
-        )
-    } else {
-        None
-    };
+        let res = execution_box
+            .run(
+                &mounts,
+                &compile_limits,
+                None,
+                "/box/submission",
+                &format!("{runtime_dir}/env"),
+                &["/runtime/compile"],
+            )
+            .await
+            .map_err(|e| {
+                eprintln!("Failed to compile submission: {e}");
+                INTERNAL_SERVER_ERROR_RESPONSE.into_response()
+            })?;
 
-    // If there is a compile_result and its exit_code is 0 or there isn't a compile_result, run
-    let should_run = if let Some(cs) = &compile_result {
-        cs.exit_code == Some(0)
-    } else {
-        true
-    };
-
-    let run_result = if should_run {
-        let next_box_id = get_next_box_id(&box_id);
-        let mut run_sandbox = Isolate::init(next_box_id).await.map_err(|e| {
-            eprintln!("Failed to initialize run sandbox: {e}");
-            INTERNAL_SERVER_ERROR_RESPONSE.into_response()
-        })?;
-        let stdin = if let Some(mut s) = req.input {
-            s.add_new_line_if_none();
-            Some(s)
+        if res.exit_code == Some(0) {
+            let run_box = Isolate::init(get_next_box_id(&box_id)).await.map_err(|e| {
+                eprintln!("Failed to initialize run sandbox: {e}");
+                INTERNAL_SERVER_ERROR_RESPONSE.into_response()
+            })?;
+            fs::rename(
+                format!("{}/submission", &execution_box.box_dir),
+                format!("{}/submission", &run_box.box_dir),
+            )
+            .await
+            .map_err(|e| {
+                eprintln!(
+                    "Failed to move {} to {}: {}",
+                    execution_box.box_dir, run_box.box_dir, e
+                );
+                INTERNAL_SERVER_ERROR_RESPONSE.into_response()
+            })?;
+            execution_box = run_box;
         } else {
-            None
-        };
-
-        Some(
-            run_sandbox
-                .run(
-                    &mounts,
-                    &run_limits,
-                    stdin.as_deref(),
-                    "/submission",
-                    &format!("{runtime_dir}/env"),
-                    &["/runtime/run"],
-                )
-                .await
-                .map_err(|e| {
-                    eprintln!("Failed to run submission: {e}");
-                    INTERNAL_SERVER_ERROR_RESPONSE.into_response()
-                })?,
-        )
+            return Ok(Json(ExecutionResponse {
+                compile: Some(res),
+                run: None,
+            })
+            .into_response());
+        }
+        Some(res)
     } else {
         None
     };
+
+    let stdin = if let Some(mut s) = req.input {
+        s.add_new_line_if_none();
+        Some(s)
+    } else {
+        None
+    };
+
+    let run_result = Some(
+        execution_box
+            .run(
+                &mounts,
+                &run_limits,
+                stdin.as_deref(),
+                "/box/submission",
+                &format!("{runtime_dir}/env"),
+                &["/runtime/run"],
+            )
+            .await
+            .map_err(|e| {
+                eprintln!("Failed to run submission: {e}");
+                INTERNAL_SERVER_ERROR_RESPONSE.into_response()
+            })?,
+    );
 
     Ok(Json(ExecutionResponse {
         compile: compile_result,

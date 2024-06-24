@@ -5,7 +5,7 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/app/target \
     cargo build --release && \
     mkdir /release && \
-    cp ./target/release/envicutor ./target/release/delete_submission /release
+    cp ./target/release/envicutor /release
 
 FROM buildpack-deps@sha256:d56cd472000631b8faca51f40d4e3f1b20deffa588f9f207fa6c60efb62ba7c4 AS isolate
 RUN apt-get update && \
@@ -24,9 +24,8 @@ RUN useradd -m envicutor && \
     apt-get update && \
     apt-get install -y sqlite3 curl xz-utils procps && \
     install -d -m755 -o envicutor -g envicutor /nix
-COPY --from=build /release/envicutor /release/delete_submission /envicutor/
+COPY --from=build /release/envicutor /envicutor/
 COPY --from=isolate /usr/local/bin/isolate /usr/local/bin
 COPY --from=isolate /usr/local/etc/isolate /usr/local/etc/isolate
 COPY ./setup-cgroup.sh ./setup-nix-and-db.sh ./db.sql /envicutor
-RUN chmod u+s /envicutor/delete_submission
 CMD ["/envicutor/setup-cgroup.sh"]
