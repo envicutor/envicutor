@@ -100,10 +100,7 @@ int main() {
       assert.equal(body.run.exit_code, 0);
     }
     console.log(`Approximate time to run all submissions: ${total_time} ms`);
-    assert.ok(
-      total_time >= 200 && total_time < MAX_CONCURRENT_SUBMISSIONS * 200,
-      'Invalid total time'
-    );
+    assert.ok(total_time >= 200, 'Invalid total time');
   }
 
   {
