@@ -133,12 +133,64 @@ while True:
   }
 
   {
+    console.log('Executing over-memory-limit C++ code');
+    const res = await sendRequest('POST', `${BASE_URL}/execute`, {
+      runtime_id: 3,
+      source_code: `const int N = 14e6;
+char mem[N];
+
+int main()
+{
+	for (int i = 0; i < N; ++i)
+		mem[i] = 1;
+	return 0;
+}
+`,
+      run_limits: {
+        memory: 13000
+      }
+    });
+
+    const text = await res.text();
+    console.log(text);
+    assert.equal(res.status, 200);
+    const body = JSON.parse(text);
+    assert.equal(body.run.exit_signal, 9);
+  }
+
+  {
+    console.log('Executing under-memory-limit C++ code');
+    const res = await sendRequest('POST', `${BASE_URL}/execute`, {
+      runtime_id: 3,
+      source_code: `const int N = 11e6;
+char mem[N];
+
+int main()
+{
+	for (int i = 0; i < N; ++i)
+		mem[i] = 1;
+	return 0;
+}
+`,
+      run_limits: {
+        memory: 13000
+      }
+    });
+
+    const text = await res.text();
+    console.log(text);
+    assert.equal(res.status, 200);
+    const body = JSON.parse(text);
+    assert.equal(body.run.exit_code, 0);
+  }
+
+  {
     console.log('Executing over-wall-time-limit Python code');
     const res = await sendRequest('POST', `${BASE_URL}/execute`, {
       runtime_id: 2,
       source_code: `
 import time
-time.sleep(3)`,
+time.sleep(0.5)`,
       run_limits: {
         wall_time: 0.3,
         extra_time: 0
@@ -150,6 +202,26 @@ time.sleep(3)`,
     assert.equal(res.status, 200);
     const body = JSON.parse(text);
     assert.equal(body.run.exit_status, 'TO');
+  }
+
+  {
+    console.log('Executing below-wall-time-limit Python code');
+    const res = await sendRequest('POST', `${BASE_URL}/execute`, {
+      runtime_id: 2,
+      source_code: `
+import time
+time.sleep(0.1)`,
+      run_limits: {
+        wall_time: 0.3,
+        extra_time: 0
+      }
+    });
+
+    const text = await res.text();
+    console.log(text);
+    assert.equal(res.status, 200);
+    const body = JSON.parse(text);
+    assert.equal(body.run.exit_code, 0);
   }
 
   {
