@@ -1,5 +1,15 @@
 const assert = require('assert');
-const { sendRequest, BASE_URL } = require('./common');
+const {
+  sendRequest,
+  BASE_URL,
+  RUN_WALL_TIME,
+  RUN_CPU_TIME,
+  RUN_MEMORY,
+  RUN_EXTRA_TIME,
+  RUN_MAX_OPEN_FILES,
+  RUN_MAX_FILE_SIZE,
+  RUN_MAX_NUMBER_OF_PROCESSES
+} = require('./common');
 
 (async () => {
   {
@@ -248,5 +258,146 @@ t.start()`,
         controller.signal
       );
     } catch (e) {}
+  }
+
+  {
+    console.log('Executing Python code with invalid run wall_time');
+    const res = await sendRequest('POST', `${BASE_URL}/execute`, {
+      runtime_id: 2,
+      source_code: 'print(input())',
+      input: 'Hello world',
+      run_limits: {
+        wall_time: RUN_WALL_TIME + 1
+      }
+    });
+
+    const text = await res.text();
+    console.log(text);
+    assert.equal(res.status, 400);
+    const body = JSON.parse(text);
+    assert.equal(
+      body.message,
+      `Invalid run limits: wall_time can't exceed ${RUN_WALL_TIME} seconds`
+    );
+  }
+
+  {
+    console.log('Executing Python code with invalid run cpu_time');
+    const res = await sendRequest('POST', `${BASE_URL}/execute`, {
+      runtime_id: 2,
+      source_code: 'print(input())',
+      input: 'Hello world',
+      run_limits: {
+        cpu_time: RUN_CPU_TIME + 1
+      }
+    });
+
+    const text = await res.text();
+    console.log(text);
+    assert.equal(res.status, 400);
+    const body = JSON.parse(text);
+    assert.equal(body.message, `Invalid run limits: cpu_time can't exceed ${RUN_CPU_TIME} seconds`);
+  }
+
+  {
+    console.log('Executing Python code with invalid run memory');
+    const res = await sendRequest('POST', `${BASE_URL}/execute`, {
+      runtime_id: 2,
+      source_code: 'print(input())',
+      input: 'Hello world',
+      run_limits: {
+        memory: RUN_MEMORY + 1
+      }
+    });
+
+    const text = await res.text();
+    console.log(text);
+    assert.equal(res.status, 400);
+    const body = JSON.parse(text);
+    assert.equal(body.message, `Invalid run limits: memory can't exceed ${RUN_MEMORY} kilobytes`);
+  }
+
+  {
+    console.log('Executing Python code with invalid run extra_time');
+    const res = await sendRequest('POST', `${BASE_URL}/execute`, {
+      runtime_id: 2,
+      source_code: 'print(input())',
+      input: 'Hello world',
+      run_limits: {
+        extra_time: RUN_EXTRA_TIME + 1
+      }
+    });
+
+    const text = await res.text();
+    console.log(text);
+    assert.equal(res.status, 400);
+    const body = JSON.parse(text);
+    assert.equal(
+      body.message,
+      `Invalid run limits: extra_time can't exceed ${RUN_EXTRA_TIME} seconds`
+    );
+  }
+
+  {
+    console.log('Executing Python code with invalid run max_open_files');
+    const res = await sendRequest('POST', `${BASE_URL}/execute`, {
+      runtime_id: 2,
+      source_code: 'print(input())',
+      input: 'Hello world',
+      run_limits: {
+        max_open_files: RUN_MAX_OPEN_FILES + 1
+      }
+    });
+
+    const text = await res.text();
+    console.log(text);
+    assert.equal(res.status, 400);
+    const body = JSON.parse(text);
+    assert.equal(
+      body.message,
+      `Invalid run limits: max_open_files can't exceed ${RUN_MAX_OPEN_FILES}`
+    );
+  }
+
+  {
+    console.log('Executing Python code with invalid run max_file_size');
+    const res = await sendRequest('POST', `${BASE_URL}/execute`, {
+      runtime_id: 2,
+      source_code: 'print(input())',
+      input: 'Hello world',
+      run_limits: {
+        max_file_size: RUN_MAX_FILE_SIZE + 1
+      }
+    });
+
+    const text = await res.text();
+    console.log(text);
+    assert.equal(res.status, 400);
+    const body = JSON.parse(text);
+    assert.equal(
+      body.message,
+      `Invalid run limits: max_file_size can't exceed ${RUN_MAX_FILE_SIZE} kilobytes`
+    );
+  }
+
+  {
+    console.log('Executing Python code with invalid run max_number_of_processes');
+    const res = await sendRequest('POST', `${BASE_URL}/execute`, {
+      runtime_id: 2,
+      source_code: 'print(input())',
+      input: 'Hello world',
+      run_limits: {
+        max_number_of_processes: RUN_MAX_NUMBER_OF_PROCESSES + 1
+      }
+    });
+
+    const text = await res.text();
+    console.log(text);
+    assert.equal(res.status, 400);
+    const body = JSON.parse(text);
+    assert.equal(
+      body.message,
+      `Invalid run limits: max_number_of_processes can't exceed ${RUN_MAX_NUMBER_OF_PROCESSES}`
+    );
   }
 })();

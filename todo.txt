@@ -1,3 +1,2 @@
-- Test setting invalid limits
 - Proper logging
 - More limit tests

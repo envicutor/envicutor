@@ -24,9 +24,9 @@ test:
 	make stop
 	make migrate
 	make start-no-logs
-	docker compose --profile test run --build test "installation.js"
-	docker compose --profile test run test "simple.js"
+	docker compose --profile test run --rm --build test "installation.js"
+	docker compose --profile test run --rm test "simple.js"
 	make stop
-	docker compose --profile test run test "simple.js"
-	docker compose --profile test run test "complex.js"
-	docker compose --profile test run test "concurrency.js"
+	docker compose --profile test run --rm test "simple.js"
+	docker compose --profile test run --rm test "complex.js"
+	docker compose --profile test run --rm test "concurrency.js"

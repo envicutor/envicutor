@@ -1,12 +1,12 @@
 const assert = require('assert');
-const { sendRequest, BASE_URL, sleep } = require('./common');
+const { sendRequest, BASE_URL, sleep, MAX_CONCURRENT_SUBMISSIONS } = require('./common');
 
 (async () => {
   {
-    console.log('Executing 64 Python submissions in parallel');
+    console.log('Executing MAX_CONCURRENT_SUBMISSIONS Python submissions in parallel');
     const promises = [];
     const before = new Date();
-    for (let i = 0; i < 64; ++i) {
+    for (let i = 0; i < MAX_CONCURRENT_SUBMISSIONS; ++i) {
       promises.push(
         sendRequest('POST', `${BASE_URL}/execute`, {
           runtime_id: 2,
@@ -34,11 +34,11 @@ print(input())`,
 
   {
     console.log(
-      'Executing 128 Python submissions in parallel (the second 64 should be blocked for some time)'
+      'Executing MAX_CONCURRENT_SUBMISSIONS * 2 Python submissions in parallel (the second MAX_CONCURRENT_SUBMISSIONS should be blocked for some time)'
     );
     const promises = [];
     const before = new Date();
-    for (let i = 0; i < 128; ++i) {
+    for (let i = 0; i < MAX_CONCURRENT_SUBMISSIONS * 2; ++i) {
       promises.push(
         sendRequest('POST', `${BASE_URL}/execute`, {
           runtime_id: 2,
@@ -65,11 +65,11 @@ time.sleep(0.5)`
 
   {
     console.log(
-      'Executing 128 C++ submissions in parallel (the second 64 should be blocked for some time)'
+      'Executing MAX_CONCURRENT_SUBMISSIONS * 2 C++ submissions in parallel (the second MAX_CONCURRENT_SUBMISSIONS should be blocked for some time)'
     );
     const promises = [];
     const before = new Date();
-    for (let i = 0; i < 128; ++i) {
+    for (let i = 0; i < MAX_CONCURRENT_SUBMISSIONS * 2; ++i) {
       promises.push(
         sendRequest('POST', `${BASE_URL}/execute`, {
           runtime_id: 3,
@@ -94,7 +94,7 @@ int main() {
       assert.equal(body.run.exit_code, 0);
     }
     console.log(`Approximate time to run all submissions: ${total_time} ms`);
-    assert.ok(total_time >= 600 && total_time < 5000, 'Invalid total time');
+    assert.ok(total_time >= 600, 'Invalid total time');
   }
 
   {

@@ -16,7 +16,7 @@ services:
       - nix:/nix
       - home:/home/envicutor
     privileged: true
-    environment:
+    environment: &env
       - PORT=5000
       - COMPILE_WALL_TIME=60
       - COMPILE_CPU_TIME=30
@@ -46,3 +46,4 @@ services:
     depends_on:
       envicutor:
         condition: service_healthy
+    environment: *env
