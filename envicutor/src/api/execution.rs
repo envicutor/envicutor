@@ -27,7 +27,7 @@ use super::common_functions::get_next_box_id;
 pub struct ExecutionRequest {
     runtime_id: u32,
     source_code: String,
-    input: Option<String>,
+    input: Vec<Option<String>>,
     compile_limits: Option<Limits>,
     run_limits: Option<Limits>,
 }
@@ -35,7 +35,7 @@ pub struct ExecutionRequest {
 #[derive(Serialize)]
 pub struct ExecutionResponse {
     compile: Option<StageResult>,
-    run: Option<StageResult>,
+    run: Option<Vec<StageResult>>,
 }
 
 pub async fn execute(
@@ -99,7 +99,10 @@ pub async fn execute(
 
     req.source_code.add_new_line_if_none();
     fs::write(
-        format!("{}/submission/{}", execution_box.box_dir, runtime.source_file_name),
+        format!(
+            "{}/submission/{}",
+            execution_box.box_dir, runtime.source_file_name
+        ),
         &req.source_code,
     )
     .await
@@ -164,15 +167,33 @@ pub async fn execute(
         None
     };
 
-    let stdin = if let Some(mut s) = req.input {
-        s.add_new_line_if_none();
-        Some(s)
-    } else {
-        None
-    };
+    let mut run_results = Vec::new();
+    if req.input.is_empty() {
+        req.input.push(None);
+    }
 
-    let run_result = Some(
-        execution_box
+    let initial_state = execution_box;
+    // TODO: don't do copying stuff if only one test case
+    for input in req.input {
+        let stdin = if let Some(mut s) = input {
+            s.add_new_line_if_none();
+            Some(s)
+        } else {
+            None
+        };
+        let mut new_run_box = Isolate::init(get_next_box_id(&box_id)).await.map_err(|e| {
+            eprintln!("Failed to initialize run sandbox: {e}");
+            INTERNAL_SERVER_ERROR_RESPONSE.into_response()
+        })?;
+
+        let src = format!("{}/submission", initial_state.box_dir);
+        let dest = format!("{}/submission", new_run_box.box_dir);
+        crate::fs::copy_dir_all(&src, &dest).await.map_err(|e| {
+            eprintln!("Failed to copy submission directory from {src} to {dest}: {e}");
+            INTERNAL_SERVER_ERROR_RESPONSE.into_response()
+        })?;
+
+        let run_result = new_run_box
             .run(
                 &mounts,
                 &run_limits,
@@ -185,12 +206,13 @@ pub async fn execute(
             .map_err(|e| {
                 eprintln!("Failed to run submission: {e}");
                 INTERNAL_SERVER_ERROR_RESPONSE.into_response()
-            })?,
-    );
+            })?;
+        run_results.push(run_result);
+    }
 
     Ok(Json(ExecutionResponse {
         compile: compile_result,
-        run: run_result,
+        run: Some(run_results),
     })
     .into_response())
 }
