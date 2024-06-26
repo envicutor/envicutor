@@ -1,3 +1,2 @@
-- Show if nix failed to update
 - Proper logging
 - More limit tests
