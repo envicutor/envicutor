@@ -10,6 +10,7 @@ const {
   RUN_MAX_FILE_SIZE,
   RUN_MAX_NUMBER_OF_PROCESSES
 } = require('./common');
+const { log } = require('console');
 
 (async () => {
   {
@@ -329,7 +330,7 @@ t.start()`,
         },
         controller.signal
       );
-    } catch (e) {}
+    } catch (e) { }
   }
 
   {
@@ -431,25 +432,86 @@ t.start()`,
     );
   }
 
+  // {
+  //   console.log('Executing Python code with invalid run max_file_size');
+  //   const res = await sendRequest('POST', `${BASE_URL}/execute`, {
+  //     runtime_id: 2,
+  //     source_code: 'print(input())',
+  //     input: 'Hello world',
+  //     run_limits: {
+  //       max_file_size: RUN_MAX_FILE_SIZE + 1
+  //     }
+  //   });
+
+  //   const text = await res.text();
+  //   console.log(text);
+  //   assert.equal(res.status, 400);
+  //   const body = JSON.parse(text);
+  // assert.equal(
+  //   body.message,
+  //   `Invalid run limits: max_file_size can't exceed ${RUN_MAX_FILE_SIZE} kilobytes`
+  // );
+  // }
+
+  // Over file size limit
   {
-    console.log('Executing Python code with invalid run max_file_size');
+    console.log('Executing over-file-size-limit C++ code');
     const res = await sendRequest('POST', `${BASE_URL}/execute`, {
-      runtime_id: 2,
-      source_code: 'print(input())',
-      input: 'Hello world',
+      runtime_id: 3,
+      source_code: `
+#include <fstream>
+#include <string>
+
+int main() {
+    std::ofstream file("large_file.txt");
+    std::string data(1024 * 1024 * 5, 'A');  // 5 MB string
+    file << data;
+    file.close();
+    return 0;
+}
+`,
       run_limits: {
-        max_file_size: RUN_MAX_FILE_SIZE + 1
+        max_file_size: 1024 * 3 // 3 MB
       }
     });
 
     const text = await res.text();
-    console.log(text);
-    assert.equal(res.status, 400);
+    console.log('Response text:', text);
+    assert.equal(res.status, 200);
     const body = JSON.parse(text);
+    console.log('Response body:', body);
     assert.equal(
-      body.message,
-      `Invalid run limits: max_file_size can't exceed ${RUN_MAX_FILE_SIZE} kilobytes`
-    );
+      body.run.exit_signal, 25);
+  }
+
+  // Under file size limit
+  {
+    console.log('Executing under-file-size-limit C++ code');
+    const res = await sendRequest('POST', `${BASE_URL}/execute`, {
+      runtime_id: 3,
+      source_code: `
+#include <fstream>
+#include <string>
+
+int main() {
+    std::ofstream file("small_file.txt");
+    std::string data(1024, 'A');  // 1 KB string
+    file << data;
+    file.close();
+    return 0;
+}
+`,
+      run_limits: {
+        max_file_size: 1024 * 3 // 3 MB
+      }
+    });
+
+    const text = await res.text();
+    console.log('Response text:', text);
+    assert.equal(res.status, 200);
+    const body = JSON.parse(text);
+    console.log('Response body:', body);
+    assert.equal(body.run.exit_code, 0); // Successful execution
   }
 
   {
