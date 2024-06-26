@@ -85,7 +85,7 @@ async fn add_env_vars_from_file(cmd: &mut Command, file_path: &str) -> Result<()
 }
 
 impl Isolate {
-    pub async fn init(box_id: u64) -> Result<Isolate, Error> {
+    pub async fn init(box_id: u64) -> Result<Self, Error> {
         let res = Command::new(ISOLATE_PATH)
             .args(["--init", "--cg", &format!("-b{}", box_id)])
             .output()

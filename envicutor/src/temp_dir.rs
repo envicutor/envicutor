@@ -5,7 +5,7 @@ pub struct TempDir {
 }
 
 impl TempDir {
-    pub async fn new(path: String) -> Result<TempDir, Error> {
+    pub async fn new(path: String) -> Result<Self, Error> {
         crate::fs::create_dir_replacing_existing(&path)
             .await
             .map_err(|e| anyhow!("Failed to create directory {path}\nError: {e}"))?;

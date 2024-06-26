@@ -71,7 +71,7 @@ pub async fn install_runtime(
     installation_timeout: WholeSeconds,
     box_id: Arc<AtomicU64>,
     metadata_cache: Arc<RwLock<Metadata>>,
-    installation_lock: Arc<RwLock<char>>,
+    installation_lock: Arc<RwLock<u8>>,
     Json(mut req): Json<AddRuntimeRequest>,
 ) -> Result<Response<Body>, Response<Body>> {
     validate_request(&req).await?;
@@ -251,7 +251,7 @@ pub async fn install_runtime(
 
 pub async fn update_nix(
     nix_update_timeout: WholeSeconds,
-    installation_lock: Arc<RwLock<char>>,
+    installation_lock: Arc<RwLock<u8>>,
 ) -> Result<Response<Body>, Response<Body>> {
     let mut cmd = Command::new(format!("{NIX_BIN_PATH}/nix-env"));
     cmd.arg("--install")

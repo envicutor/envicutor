@@ -118,7 +118,7 @@ async fn main() {
 
     let box_id = Arc::new(AtomicU64::new(0));
     let metadata_cache = Arc::new(RwLock::new(get_runtimes()));
-    let installation_lock = Arc::new(RwLock::new('a'));
+    let installation_lock = Arc::new(RwLock::new(0));
     let app = Router::new()
         .route("/health", get(get_health))
         .route(

@@ -42,7 +42,7 @@ pub async fn execute(
     semaphore: Arc<Semaphore>,
     box_id: Arc<AtomicU64>,
     metadata_cache: Arc<RwLock<Metadata>>,
-    installation_lock: Arc<RwLock<char>>,
+    installation_lock: Arc<RwLock<u8>>,
     system_limits: SystemLimits,
     Json(mut req): Json<ExecutionRequest>,
 ) -> Result<Response<Body>, Response<Body>> {
