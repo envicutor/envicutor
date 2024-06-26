@@ -267,8 +267,14 @@ pub async fn update_nix(
         INTERNAL_SERVER_ERROR_RESPONSE.into_response()
     })?;
 
+    let status = if cmd_res.status.success() {
+        StatusCode::OK
+    } else {
+        StatusCode::INTERNAL_SERVER_ERROR
+    };
+
     Ok((
-        StatusCode::OK,
+        status,
         Json(InstallationResponse {
             stdout: String::from_utf8_lossy(&cmd_res.stdout).to_string(),
             stderr: String::from_utf8_lossy(&cmd_res.stderr).to_string(),
