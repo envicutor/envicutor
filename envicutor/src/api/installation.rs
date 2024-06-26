@@ -71,6 +71,7 @@ pub async fn install_runtime(
     installation_timeout: WholeSeconds,
     box_id: Arc<AtomicU64>,
     metadata_cache: Arc<RwLock<Metadata>>,
+    installation_lock: Arc<RwLock<char>>,
     Json(mut req): Json<AddRuntimeRequest>,
 ) -> Result<Response<Body>, Response<Body>> {
     validate_request(&req).await?;
@@ -95,7 +96,7 @@ pub async fn install_runtime(
             INTERNAL_SERVER_ERROR_RESPONSE.into_response()
         })?;
 
-    let mut metadata_guard = metadata_cache.write().await;
+    let metadata_guard = metadata_cache.read().await;
     if metadata_guard
         .values()
         .any(|runtime| runtime.name == req.name)
@@ -108,7 +109,9 @@ pub async fn install_runtime(
         )
             .into_response());
     }
+    drop(metadata_guard);
 
+    let installation_guard = installation_lock.write().await;
     let mut cmd = Command::new("env");
     cmd.arg("-i")
         .arg("PATH=/bin")
@@ -120,6 +123,7 @@ pub async fn install_runtime(
         eprintln!("Failed to run nix-shell: {e}");
         INTERNAL_SERVER_ERROR_RESPONSE.into_response()
     })?;
+    drop(installation_guard);
     let stdout = String::from_utf8_lossy(&cmd_res.stdout).to_string();
     let stderr = String::from_utf8_lossy(&cmd_res.stderr).to_string();
     let success = cmd_res.status.success();
@@ -224,6 +228,7 @@ pub async fn install_runtime(
                 INTERNAL_SERVER_ERROR_RESPONSE.into_response()
             })?;
 
+        let mut metadata_guard = metadata_cache.write().await;
         metadata_guard.insert(
             runtime_id,
             Runtime {
@@ -246,7 +251,7 @@ pub async fn install_runtime(
 
 pub async fn update_nix(
     nix_update_timeout: WholeSeconds,
-    metadata_cache: Arc<RwLock<Metadata>>,
+    installation_lock: Arc<RwLock<char>>,
 ) -> Result<Response<Body>, Response<Body>> {
     let mut cmd = Command::new(format!("{NIX_BIN_PATH}/nix-env"));
     cmd.arg("--install")
@@ -255,7 +260,7 @@ pub async fn update_nix(
         .args(["-I", "nixpkgs=channel:nixpkgs-unstable"])
         .args(["--timeout".to_string(), nix_update_timeout.to_string()]);
 
-    let _permit = metadata_cache.write().await;
+    let _permit = installation_lock.write().await;
 
     let cmd_res = cmd.output().await.map_err(|e| {
         eprintln!("Failed to get the output of the nix update command: {e}");

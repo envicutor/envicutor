@@ -16,11 +16,7 @@ stop:
 migrate:
 	docker volume rm -f envicutor_runtimes
 
-stop-test:
-	docker compose --profile test down
-
 test:
-	make stop-test
 	make stop
 	make migrate
 	make start-no-logs
@@ -30,3 +26,4 @@ test:
 	docker compose --profile test run --rm test "simple.js"
 	docker compose --profile test run --rm test "complex.js"
 	docker compose --profile test run --rm test "concurrency.js"
+	make logs

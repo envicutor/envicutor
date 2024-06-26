@@ -42,6 +42,7 @@ pub async fn execute(
     semaphore: Arc<Semaphore>,
     box_id: Arc<AtomicU64>,
     metadata_cache: Arc<RwLock<Metadata>>,
+    installation_lock: Arc<RwLock<char>>,
     system_limits: SystemLimits,
     Json(mut req): Json<ExecutionRequest>,
 ) -> Result<Response<Body>, Response<Body>> {
@@ -66,26 +67,20 @@ pub async fn execute(
         )
             .into_response()
     })?;
+
     let metadata_guard = metadata_cache.read().await;
-    if !metadata_guard.contains_key(&req.runtime_id) {
-        return Err((
+    let runtime = metadata_guard.get(&req.runtime_id).ok_or_else(|| {
+        (
             StatusCode::BAD_REQUEST,
             Json(Message {
                 message: format!("Runtime with id: {} does not exist", req.runtime_id),
             }),
         )
-            .into_response());
-    }
-
-    let current_box_id = get_next_box_id(&box_id);
-    let runtime = metadata_guard.get(&req.runtime_id).ok_or_else(|| {
-        eprintln!(
-            "Failed to get runtime info, runtime of id {} does not exist in the cache",
-            req.runtime_id
-        );
-        INTERNAL_SERVER_ERROR_RESPONSE.into_response()
+            .into_response()
     })?;
 
+    let _installation_guard = installation_lock.read().await;
+    let current_box_id = get_next_box_id(&box_id);
     let mut execution_box = Isolate::init(current_box_id).await.map_err(|e| {
         eprintln!("Failed to initialize sandbox: {e}");
         INTERNAL_SERVER_ERROR_RESPONSE.into_response()
@@ -99,7 +94,10 @@ pub async fn execute(
 
     req.source_code.add_new_line_if_none();
     fs::write(
-        format!("{}/submission/{}", execution_box.box_dir, runtime.source_file_name),
+        format!(
+            "{}/submission/{}",
+            execution_box.box_dir, runtime.source_file_name
+        ),
         &req.source_code,
     )
     .await

@@ -276,4 +276,39 @@ int main() {
       'Second installation finished before first installation'
     );
   }
+
+  {
+    console.log(
+      'Getting the available runtimes while an installation is running (should not be blocked)'
+    );
+    const installation_promise = sendRequest('POST', `${BASE_URL}/runtimes`, {
+      name: 'Fake lang',
+      nix_shell: `{ pkgs ? import (
+    fetchTarball {
+      url="https://github.com/NixOS/nixpkgs/archive/72da83d9515b43550436891f538ff41d68eecc7f.tar.gz";
+      sha256="177sws22nqkvv8am76qmy9knham2adfh3gv7hrjf6492z1mvy02y";
+    }
+  ) {} }:
+  pkgs.mkShell {
+    shellHook = ''
+    sleep 0.5
+    exit 1
+    '';
+    nativeBuildInputs = with pkgs; [];
+  }`,
+      compile_script: 'g++ main.cpp',
+      run_script: './a.out',
+      source_file_name: 'main.cpp'
+    });
+
+    await sleep(10);
+
+    const before = new Date();
+    const res = await sendRequest('GET', `${BASE_URL}/runtimes`);
+    const duration = new Date() - before;
+    console.log(`Time taken: ${duration} ms`);
+    assert.equal(res.status, 200);
+    assert.ok(duration < 200);
+    await installation_promise;
+  }
 })();

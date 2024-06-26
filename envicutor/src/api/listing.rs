@@ -13,8 +13,8 @@ pub struct Runtime {
 }
 
 pub async fn list_runtimes(metadata_cache: Arc<RwLock<Metadata>>) -> impl IntoResponse {
-    let metadata_guard = metadata_cache.read().await;
     let mut runtimes: Vec<Runtime> = Vec::new();
+    let metadata_guard = metadata_cache.read().await;
     for (key, value) in metadata_guard.iter() {
         runtimes.push(Runtime {
             id: *key,

@@ -118,6 +118,7 @@ async fn main() {
 
     let box_id = Arc::new(AtomicU64::new(0));
     let metadata_cache = Arc::new(RwLock::new(get_runtimes()));
+    let installation_lock = Arc::new(RwLock::new('a'));
     let app = Router::new()
         .route("/health", get(get_health))
         .route(
@@ -132,7 +133,16 @@ async fn main() {
             post({
                 let box_id = box_id.clone();
                 let metadata_cache = metadata_cache.clone();
-                move |req| install_runtime(installation_timeout, box_id, metadata_cache, req)
+                let installation_lock = installation_lock.clone();
+                move |req| {
+                    install_runtime(
+                        installation_timeout,
+                        box_id,
+                        metadata_cache,
+                        installation_lock,
+                        req,
+                    )
+                }
             }),
         )
         .route(
@@ -145,14 +155,15 @@ async fn main() {
         .route(
             "/update",
             post({
-                let metadata_cache = metadata_cache.clone();
-                move || update_nix(update_timeout, metadata_cache)
+                let installation_lock = installation_lock.clone();
+                move || update_nix(update_timeout, installation_lock)
             }),
         )
         .route(
             "/execute",
             post({
                 let metadata_cache = metadata_cache.clone();
+                let installation_lock = installation_lock.clone();
                 let box_id = box_id.clone();
                 let system_limits = system_limits.clone();
                 let execution_semaphore = execution_semaphore.clone();
@@ -161,6 +172,7 @@ async fn main() {
                         execution_semaphore,
                         box_id,
                         metadata_cache,
+                        installation_lock,
                         system_limits,
                         req,
                     )
