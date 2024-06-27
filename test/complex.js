@@ -552,20 +552,23 @@ int main() {
 
   // Over file size limit
   {
-    console.log('Executing over-file-size-limit C++ code');
+    console.log('Executing over-file-size-limit Python code');
     const res = await sendRequest('POST', `${BASE_URL}/execute`, {
-      runtime_id: 3,
+      runtime_id: 2,
       source_code: `
-#include <fstream>
-#include <string>
+import os
 
-int main() {
-    std::ofstream file("large_file.txt");
-    std::string data(1024 * 1024 * 5, 'A');  // 5 MB string
-    file << data;
-    file.close();
-    return 0;
-}
+file_path = "large_file.txt"
+data = 'A' * (1024 * 1024 * 5)  # 5 MB string
+with open(file_path, "w") as file:
+    file.write(data)
+
+if os.path.getsize(file_path) > (1024 * 3):
+    print(f"File {file_path} exceeds the size limit.")
+    os.remove(file_path)
+else:
+    print(f"File {file_path} created successfully.")
+
 `,
       run_limits: {
         max_file_size: 1024 * 3 // 3 MB
@@ -578,25 +581,27 @@ int main() {
     const body = JSON.parse(text);
     // console.log('Response body:', body);
     assert.equal(
-      body.run.exit_signal, 25);
+      body.run.exit_code, 1);
   }
 
   // Under file size limit
   {
-    console.log('Executing under-file-size-limit C++ code');
+    console.log('Executing under-file-size-limit Python code');
     const res = await sendRequest('POST', `${BASE_URL}/execute`, {
-      runtime_id: 3,
+      runtime_id: 2,
       source_code: `
-#include <fstream>
-#include <string>
+import os
 
-int main() {
-    std::ofstream file("small_file.txt");
-    std::string data(1024, 'A');  // 1 KB string
-    file << data;
-    file.close();
-    return 0;
-}
+file_path = "small_file.txt"
+data = 'A' * 1024  # 1 KB string
+with open(file_path, "w") as file:
+  file.write(data)
+
+if os.path.getsize(file_path) > (1024 * 3):
+  print(f"File {file_path} exceeds the size limit.")
+  os.remove(file_path)
+else:
+  print(f"File {file_path} created successfully.")
 `,
       run_limits: {
         max_file_size: 1024 * 3 // 3 MB
