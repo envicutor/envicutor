@@ -432,26 +432,123 @@ t.start()`,
     );
   }
 
-  // {
-  //   console.log('Executing Python code with invalid run max_file_size');
-  //   const res = await sendRequest('POST', `${BASE_URL}/execute`, {
-  //     runtime_id: 2,
-  //     source_code: 'print(input())',
-  //     input: 'Hello world',
-  //     run_limits: {
-  //       max_file_size: RUN_MAX_FILE_SIZE + 1
-  //     }
-  //   });
 
-  //   const text = await res.text();
-  //   console.log(text);
-  //   assert.equal(res.status, 400);
-  //   const body = JSON.parse(text);
-  // assert.equal(
-  //   body.message,
-  //   `Invalid run limits: max_file_size can't exceed ${RUN_MAX_FILE_SIZE} kilobytes`
-  // );
-  // }
+  {
+    console.log('Executing C++ code with a higher max_open_files limit (should not be able to open all of them)');
+    const res = await sendRequest('POST', `${BASE_URL}/execute`, {
+      runtime_id: 3,
+      source_code: `
+#include <iostream>
+#include <fstream>
+#include <vector>
+#include <string>
+
+int main() {
+    std::string input;
+    std::cin >> input;
+
+    // Vector to store the file stream objects
+    std::vector<std::ofstream> open_files;
+
+    // Open the files in write mode and store the file stream objects in the vector
+    for (int i = 0; i < 50; i++) {
+        open_files.emplace_back("file" + std::to_string(i) + ".txt", std::ios::out);
+        if (!open_files.back().is_open()) {
+            std::cerr << "Failed to open " << "file" + std::to_string(i) + ".txt" << std::endl;
+        } else {
+            std::cout << "Opened " << "file" + std::to_string(i) + ".txt" << std::endl;
+        }
+    }
+
+    for (auto& file : open_files) {
+        if (file.is_open()) {
+            file << input;
+        }
+    }
+
+    return 0;
+}`,
+      input: 'Hello world',
+      run_limits: {
+        max_open_files: 50
+      }
+    });
+
+    const text = await res.text();
+    console.log(text);
+    assert.equal(res.status, 200);
+    const body = JSON.parse(text);
+    assert.equal(body.run.stderr, 'Failed to open file47.txt\nFailed to open file48.txt\nFailed to open file49.txt\n');
+  }
+
+  {
+    console.log('Executing C++ code with a lower max_open_files limit');
+    const res = await sendRequest('POST', `${BASE_URL}/execute`, {
+      runtime_id: 3,
+      source_code: `
+#include <iostream>
+#include <fstream>
+#include <vector>
+#include <string>
+
+int main() {
+    std::string input;
+    std::cin >> input;
+
+    // Vector to store the file stream objects
+    std::vector<std::ofstream> open_files;
+
+    // Open the files in write mode and store the file stream objects in the vector
+    for (int i = 0; i < 40; i++) {
+        open_files.emplace_back("file" + std::to_string(i) + ".txt", std::ios::out);
+        if (!open_files.back().is_open()) {
+            std::cerr << "Failed to open " << "file" + std::to_string(i) + ".txt" << std::endl;
+        } else {
+            std::cout << "Opened " << "file" + std::to_string(i) + ".txt" << std::endl;
+        }
+    }
+
+    for (auto& file : open_files) {
+        if (file.is_open()) {
+            file << input;
+        }
+    }
+
+    return 0;
+}`,
+      input: 'Hello world',
+      run_limits: {
+        max_open_files: 50
+      }
+    });
+
+    const text = await res.text();
+    console.log(text);
+    assert.equal(res.status, 200);
+    const body = JSON.parse(text);
+    assert.equal(body.run.stderr, '');
+  }
+
+  {
+    console.log('Executing Python code with invalid run max_file_size');
+    const res = await sendRequest('POST', `${BASE_URL}/execute`, {
+      runtime_id: 2,
+      source_code: 'print(input())',
+      input: 'Hello world',
+      run_limits: {
+        max_file_size: RUN_MAX_FILE_SIZE + 1
+      }
+    });
+
+    const text = await res.text();
+    console.log(text);
+    assert.equal(res.status, 400);
+    const body = JSON.parse(text);
+    assert.equal(
+      body.message,
+      `Invalid run limits: max_file_size can't exceed ${RUN_MAX_FILE_SIZE} kilobytes`
+    );
+  }
 
   // Over file size limit
   {
@@ -476,10 +573,10 @@ int main() {
     });
 
     const text = await res.text();
-    console.log('Response text:', text);
+    console.log(text);
     assert.equal(res.status, 200);
     const body = JSON.parse(text);
-    console.log('Response body:', body);
+    // console.log('Response body:', body);
     assert.equal(
       body.run.exit_signal, 25);
   }
@@ -507,10 +604,10 @@ int main() {
     });
 
     const text = await res.text();
-    console.log('Response text:', text);
+    console.log(text);
     assert.equal(res.status, 200);
     const body = JSON.parse(text);
-    console.log('Response body:', body);
+    // console.log('Response body:', body);
     assert.equal(body.run.exit_code, 0); // Successful execution
   }
 
