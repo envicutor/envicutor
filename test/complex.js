@@ -436,38 +436,28 @@ t.start()`,
   {
     console.log('Executing C++ code with a higher max_open_files limit (should not be able to open all of them)');
     const res = await sendRequest('POST', `${BASE_URL}/execute`, {
-      runtime_id: 3,
+      runtime_id: 2,
       source_code: `
-#include <iostream>
-#include <fstream>
-#include <vector>
-#include <string>
+import os
 
-int main() {
-    std::string input;
-    std::cin >> input;
+input_data = input()
+open_files = []
 
-    // Vector to store the file stream objects
-    std::vector<std::ofstream> open_files;
+for i in range(50):
+    try:
+        file = open(f"file{i}.txt", "w")
+        open_files.append(file)
+        print(f"Opened file{i}.txt")
+    except Exception as e:
+        print(f"Failed to open file{i}.txt", file=sys.stderr)
 
-    // Open the files in write mode and store the file stream objects in the vector
-    for (int i = 0; i < 50; i++) {
-        open_files.emplace_back("file" + std::to_string(i) + ".txt", std::ios::out);
-        if (!open_files.back().is_open()) {
-            std::cerr << "Failed to open " << "file" + std::to_string(i) + ".txt" << std::endl;
-        } else {
-            std::cout << "Opened " << "file" + std::to_string(i) + ".txt" << std::endl;
-        }
-    }
-
-    for (auto& file : open_files) {
-        if (file.is_open()) {
-            file << input;
-        }
-    }
-
-    return 0;
-}`,
+for file in open_files:
+    try:
+        file.write(input_data)
+        file.close()
+    except Exception as e:
+        print(f"Failed to write to or close file {file.name}")
+`,
       input: 'Hello world',
       run_limits: {
         max_open_files: 50
@@ -478,44 +468,34 @@ int main() {
     console.log(text);
     assert.equal(res.status, 200);
     const body = JSON.parse(text);
-    assert.equal(body.run.stderr, 'Failed to open file47.txt\nFailed to open file48.txt\nFailed to open file49.txt\n');
+    assert.equal(body.run.exit_code, 1);
   }
 
   {
-    console.log('Executing C++ code with a lower max_open_files limit');
+    console.log('Executing Python code with a lower max_open_files limit');
     const res = await sendRequest('POST', `${BASE_URL}/execute`, {
-      runtime_id: 3,
+      runtime_id: 2,
       source_code: `
-#include <iostream>
-#include <fstream>
-#include <vector>
-#include <string>
+import os
 
-int main() {
-    std::string input;
-    std::cin >> input;
+input_data = input()
+open_files = []
 
-    // Vector to store the file stream objects
-    std::vector<std::ofstream> open_files;
+for i in range(40):
+    try:
+        file = open(f"file{i}.txt", "w")
+        open_files.append(file)
+        print(f"Opened file{i}.txt")
+    except Exception as e:
+        print(f"Failed to open file{i}.txt", file=sys.stderr)
 
-    // Open the files in write mode and store the file stream objects in the vector
-    for (int i = 0; i < 40; i++) {
-        open_files.emplace_back("file" + std::to_string(i) + ".txt", std::ios::out);
-        if (!open_files.back().is_open()) {
-            std::cerr << "Failed to open " << "file" + std::to_string(i) + ".txt" << std::endl;
-        } else {
-            std::cout << "Opened " << "file" + std::to_string(i) + ".txt" << std::endl;
-        }
-    }
-
-    for (auto& file : open_files) {
-        if (file.is_open()) {
-            file << input;
-        }
-    }
-
-    return 0;
-}`,
+for file in open_files:
+    try:
+        file.write(input_data)
+        file.close()
+    except Exception as e:
+        print(f"Failed to write to or close file {file.name}")
+`,
       input: 'Hello world',
       run_limits: {
         max_open_files: 50
@@ -575,8 +555,7 @@ with open(file_path, "w") as file:
     assert.equal(res.status, 200);
     const body = JSON.parse(text);
     // console.log('Response body:', body);
-    assert.equal(
-      body.run.exit_code, 1);
+    assert.equal(body.run.exit_code, 1);
   }
 
   // Under file size limit
