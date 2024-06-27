@@ -562,11 +562,6 @@ file_path = "large_file.txt"
 data = 'A' * (1024 * 1024 * 5)  # 5 MB string
 with open(file_path, "w") as file:
     file.write(data)
-
-if os.path.getsize(file_path) > (1024 * 3):
-    print(f"File {file_path} exceeds the size limit.")
-    os.remove(file_path)
-else:
     print(f"File {file_path} created successfully.")
 
 `,
@@ -596,11 +591,6 @@ file_path = "small_file.txt"
 data = 'A' * 1024  # 1 KB string
 with open(file_path, "w") as file:
   file.write(data)
-
-if os.path.getsize(file_path) > (1024 * 3):
-  print(f"File {file_path} exceeds the size limit.")
-  os.remove(file_path)
-else:
   print(f"File {file_path} created successfully.")
 `,
       run_limits: {
