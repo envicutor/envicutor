@@ -112,7 +112,7 @@ impl Isolate {
         limits: &MandatoryLimits,
         stdin: Option<&str>,
         workdir: &str,
-        env_file: &str,
+        env_file: Option<&str>,
         cmd_args: &[&str],
     ) -> Result<StageResult, Error> {
         let mut cmd = Command::new(ISOLATE_PATH);
@@ -139,7 +139,9 @@ impl Isolate {
             .arg("--")
             .args(cmd_args);
 
-        add_env_vars_from_file(cmd.env_clear(), env_file).await?;
+        if let Some(env_file) = env_file {
+            add_env_vars_from_file(cmd.env_clear(), env_file).await?;
+        }
 
         let mut child = cmd
             .stdin(Stdio::piped())

@@ -1,18 +1,23 @@
 use std::sync::{atomic::AtomicU64, Arc};
 
+use anyhow::{anyhow, Error};
 use axum::{
     body::Body,
+    extract::Query,
     http::StatusCode,
     response::{IntoResponse, Response},
     Json,
 };
+use base64::{prelude::BASE64_STANDARD, Engine};
 use serde::{Deserialize, Serialize};
 use tokio::{
     fs,
     sync::{RwLock, Semaphore},
+    task,
 };
 
 use crate::{
+    api::common_functions::get_next_box_id,
     api::common_responses::{Message, INTERNAL_SERVER_ERROR_RESPONSE},
     globals::RUNTIMES_DIR,
     isolate::{Isolate, StageResult},
@@ -21,7 +26,12 @@ use crate::{
     types::Metadata,
 };
 
-use super::common_functions::get_next_box_id;
+const SOURCE_ZIP_NAME: &str = "source.zip";
+
+#[derive(Deserialize)]
+pub struct ExecutionQuery {
+    is_project: bool,
+}
 
 #[derive(Deserialize)]
 pub struct ExecutionRequest {
@@ -34,8 +44,30 @@ pub struct ExecutionRequest {
 
 #[derive(Serialize)]
 pub struct ExecutionResponse {
+    extract: Option<StageResult>,
     compile: Option<StageResult>,
     run: Option<StageResult>,
+}
+
+pub async fn renew_box(box_id: &Arc<AtomicU64>, execution_box: &mut Isolate) -> Result<(), Error> {
+    let new_box = Isolate::init(get_next_box_id(&box_id))
+        .await
+        .map_err(|e| anyhow!("Failed to initialize run sandbox: {e}"))?;
+    fs::rename(
+        format!("{}/submission", &execution_box.box_dir),
+        format!("{}/submission", &new_box.box_dir),
+    )
+    .await
+    .map_err(|e| {
+        anyhow!(
+            "Failed to move {} to {}: {}",
+            execution_box.box_dir,
+            new_box.box_dir,
+            e
+        )
+    })?;
+    *execution_box = new_box;
+    Ok(())
 }
 
 pub async fn execute(
@@ -45,12 +77,18 @@ pub async fn execute(
     installation_lock: Arc<RwLock<u8>>,
     system_limits: SystemLimits,
     Json(mut req): Json<ExecutionRequest>,
+    query: Option<Query<ExecutionQuery>>,
 ) -> Result<Response<Body>, Response<Body>> {
     let _installation_guard = installation_lock.read().await;
     let _permit = semaphore.acquire().await.map_err(|e| {
         eprintln!("Failed to acquire execution semaphore: {e}");
         INTERNAL_SERVER_ERROR_RESPONSE.into_response()
     })?;
+    let is_project = if let Some(query) = query {
+        query.is_project
+    } else {
+        false
+    };
     let compile_limits = req
         .compile_limits
         .get(&system_limits.compile)
@@ -89,22 +127,48 @@ pub async fn execute(
         eprintln!("Failed to initialize sandbox: {e}");
         INTERNAL_SERVER_ERROR_RESPONSE.into_response()
     })?;
-    fs::create_dir(format!("{}/submission", &execution_box.box_dir))
-        .await
-        .map_err(|e| {
-            eprintln!("Failed to create submission directory: {e}");
-            INTERNAL_SERVER_ERROR_RESPONSE.into_response()
-        })?;
+
+    let initial_submission_dir = format!("{}/submission", execution_box.box_dir);
+    fs::create_dir(&initial_submission_dir).await.map_err(|e| {
+        eprintln!("Failed to create submission directory: {e}");
+        INTERNAL_SERVER_ERROR_RESPONSE.into_response()
+    })?;
 
     req.source_code.add_new_line_if_none();
-    fs::write(
-        format!(
-            "{}/submission/{}",
-            execution_box.box_dir, runtime.source_file_name
-        ),
-        &req.source_code,
-    )
-    .await
+
+    if is_project {
+        let (req_ret, decoded_res) = task::spawn_blocking(move || {
+            let decoded = BASE64_STANDARD.decode(&req.source_code);
+            (req, decoded)
+        })
+        .await
+        .map_err(|e| {
+            eprintln!("Failed to spawn blocking decoding task: {e}");
+            INTERNAL_SERVER_ERROR_RESPONSE.into_response()
+        })?;
+        // Errors returned from decoding should be safe to show in response
+        let decoded = decoded_res.map_err(|e| {
+            (
+                StatusCode::BAD_REQUEST,
+                Json(Message {
+                    message: e.to_string(),
+                }),
+            )
+                .into_response()
+        })?;
+        req = req_ret;
+        fs::write(
+            format!("{}/{}", initial_submission_dir, SOURCE_ZIP_NAME),
+            &decoded,
+        )
+        .await
+    } else {
+        fs::write(
+            format!("{}/{}", initial_submission_dir, runtime.source_file_name),
+            &req.source_code,
+        )
+        .await
+    }
     .map_err(|e| {
         eprintln!(
             "Failed to write the source code in {}: {}",
@@ -112,6 +176,38 @@ pub async fn execute(
         );
         INTERNAL_SERVER_ERROR_RESPONSE.into_response()
     })?;
+
+    let extraction_result = if is_project {
+        let res = execution_box
+            .run(
+                &[],
+                &compile_limits,
+                None,
+                "/box/submission",
+                None,
+                &["unzip", "-qq", SOURCE_ZIP_NAME],
+            )
+            .await
+            .map_err(|e| {
+                eprintln!("Failed to run isolate to unzip the source file: {e}");
+                INTERNAL_SERVER_ERROR_RESPONSE.into_response()
+            })?;
+        if res.exit_code != Some(0) {
+            return Ok(Json(ExecutionResponse {
+                extract: Some(res),
+                compile: None,
+                run: None,
+            })
+            .into_response());
+        }
+        renew_box(&box_id, &mut execution_box).await.map_err(|e| {
+            eprintln!("Failed to renew box after extraction: {e}");
+            INTERNAL_SERVER_ERROR_RESPONSE.into_response()
+        })?;
+        Some(res)
+    } else {
+        None
+    };
 
     let runtime_dir = format!("{}/{}", RUNTIMES_DIR, req.runtime_id);
     let mounts = ["/nix", &format!("/runtime={runtime_dir}")];
@@ -123,7 +219,7 @@ pub async fn execute(
                 &compile_limits,
                 None,
                 "/box/submission",
-                &format!("{runtime_dir}/env"),
+                Some(&format!("{runtime_dir}/env")),
                 &["/runtime/compile"],
             )
             .await
@@ -133,25 +229,13 @@ pub async fn execute(
             })?;
 
         if res.exit_code == Some(0) {
-            let run_box = Isolate::init(get_next_box_id(&box_id)).await.map_err(|e| {
-                eprintln!("Failed to initialize run sandbox: {e}");
+            renew_box(&box_id, &mut execution_box).await.map_err(|e| {
+                eprintln!("Failed to renew box: {e}");
                 INTERNAL_SERVER_ERROR_RESPONSE.into_response()
             })?;
-            fs::rename(
-                format!("{}/submission", &execution_box.box_dir),
-                format!("{}/submission", &run_box.box_dir),
-            )
-            .await
-            .map_err(|e| {
-                eprintln!(
-                    "Failed to move {} to {}: {}",
-                    execution_box.box_dir, run_box.box_dir, e
-                );
-                INTERNAL_SERVER_ERROR_RESPONSE.into_response()
-            })?;
-            execution_box = run_box;
         } else {
             return Ok(Json(ExecutionResponse {
+                extract: extraction_result,
                 compile: Some(res),
                 run: None,
             })
@@ -176,7 +260,7 @@ pub async fn execute(
                 &run_limits,
                 stdin.as_deref(),
                 "/box/submission",
-                &format!("{runtime_dir}/env"),
+                Some(&format!("{runtime_dir}/env")),
                 &["/runtime/run"],
             )
             .await
@@ -187,6 +271,7 @@ pub async fn execute(
     );
 
     Ok(Json(ExecutionResponse {
+        extract: extraction_result,
         compile: compile_result,
         run: run_result,
     })

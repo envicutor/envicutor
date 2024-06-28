@@ -167,7 +167,7 @@ async fn main() {
                 let box_id = box_id.clone();
                 let system_limits = system_limits.clone();
                 let execution_semaphore = execution_semaphore.clone();
-                move |req| {
+                move |query, req| {
                     execute(
                         execution_semaphore,
                         box_id,
@@ -175,6 +175,7 @@ async fn main() {
                         installation_lock,
                         system_limits,
                         req,
+                        query,
                     )
                 }
             }),
