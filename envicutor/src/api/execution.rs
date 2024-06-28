@@ -50,7 +50,7 @@ pub struct ExecutionResponse {
 }
 
 pub async fn renew_box(box_id: &Arc<AtomicU64>, execution_box: &mut Isolate) -> Result<(), Error> {
-    let new_box = Isolate::init(get_next_box_id(&box_id))
+    let new_box = Isolate::init(get_next_box_id(box_id))
         .await
         .map_err(|e| anyhow!("Failed to initialize run sandbox: {e}"))?;
     fs::rename(
