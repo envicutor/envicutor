@@ -46,6 +46,11 @@ pub async fn execute(
     system_limits: SystemLimits,
     Json(mut req): Json<ExecutionRequest>,
 ) -> Result<Response<Body>, Response<Body>> {
+    let _installation_guard = installation_lock.read().await;
+    let _permit = semaphore.acquire().await.map_err(|e| {
+        eprintln!("Failed to acquire execution semaphore: {e}");
+        INTERNAL_SERVER_ERROR_RESPONSE.into_response()
+    })?;
     let compile_limits = req
         .compile_limits
         .get(&system_limits.compile)
@@ -79,7 +84,6 @@ pub async fn execute(
             .into_response()
     })?;
 
-    let _installation_guard = installation_lock.read().await;
     let current_box_id = get_next_box_id(&box_id);
     let mut execution_box = Isolate::init(current_box_id).await.map_err(|e| {
         eprintln!("Failed to initialize sandbox: {e}");
@@ -109,10 +113,6 @@ pub async fn execute(
         INTERNAL_SERVER_ERROR_RESPONSE.into_response()
     })?;
 
-    let _permit = semaphore.acquire().await.map_err(|e| {
-        eprintln!("Failed to acquire execution semaphore: {e}");
-        INTERNAL_SERVER_ERROR_RESPONSE.into_response()
-    })?;
     let runtime_dir = format!("{}/{}", RUNTIMES_DIR, req.runtime_id);
     let mounts = ["/nix", &format!("/runtime={runtime_dir}")];
 

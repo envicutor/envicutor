@@ -10,7 +10,6 @@ const {
   RUN_MAX_FILE_SIZE,
   RUN_MAX_NUMBER_OF_PROCESSES
 } = require('./common');
-const { log } = require('console');
 
 (async () => {
   {
@@ -330,7 +329,7 @@ t.start()`,
         },
         controller.signal
       );
-    } catch (e) { }
+    } catch (e) {}
   }
 
   {
@@ -432,9 +431,10 @@ t.start()`,
     );
   }
 
-
   {
-    console.log('Executing C++ code with a higher max_open_files limit (should not be able to open all of them)');
+    console.log(
+      'Executing C++ code with a higher max_open_files limit (should not be able to open all of them)'
+    );
     const res = await sendRequest('POST', `${BASE_URL}/execute`, {
       runtime_id: 2,
       source_code: `
@@ -530,7 +530,6 @@ for file in open_files:
     );
   }
 
-  // Over file size limit
   {
     console.log('Executing over-file-size-limit Python code');
     const res = await sendRequest('POST', `${BASE_URL}/execute`, {
@@ -554,11 +553,9 @@ with open(file_path, "w") as file:
     console.log(text);
     assert.equal(res.status, 200);
     const body = JSON.parse(text);
-    // console.log('Response body:', body);
     assert.equal(body.run.exit_code, 1);
   }
 
-  // Under file size limit
   {
     console.log('Executing under-file-size-limit Python code');
     const res = await sendRequest('POST', `${BASE_URL}/execute`, {
@@ -581,8 +578,7 @@ with open(file_path, "w") as file:
     console.log(text);
     assert.equal(res.status, 200);
     const body = JSON.parse(text);
-    // console.log('Response body:', body);
-    assert.equal(body.run.exit_code, 0); // Successful execution
+    assert.equal(body.run.exit_code, 0);
   }
 
   {

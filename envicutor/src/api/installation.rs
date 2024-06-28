@@ -74,6 +74,7 @@ pub async fn install_runtime(
     installation_lock: Arc<RwLock<u8>>,
     Json(mut req): Json<AddRuntimeRequest>,
 ) -> Result<Response<Body>, Response<Body>> {
+    let _permit = installation_lock.write().await;
     validate_request(&req).await?;
     req.nix_shell.add_new_line_if_none();
     req.compile_script.add_new_line_if_none();
@@ -111,7 +112,6 @@ pub async fn install_runtime(
     }
     drop(metadata_guard);
 
-    let installation_guard = installation_lock.write().await;
     let mut cmd = Command::new("env");
     cmd.arg("-i")
         .arg("PATH=/bin")
@@ -123,7 +123,6 @@ pub async fn install_runtime(
         eprintln!("Failed to run nix-shell: {e}");
         INTERNAL_SERVER_ERROR_RESPONSE.into_response()
     })?;
-    drop(installation_guard);
     let stdout = String::from_utf8_lossy(&cmd_res.stdout).to_string();
     let stderr = String::from_utf8_lossy(&cmd_res.stderr).to_string();
     let success = cmd_res.status.success();
@@ -253,14 +252,14 @@ pub async fn update_nix(
     nix_update_timeout: WholeSeconds,
     installation_lock: Arc<RwLock<u8>>,
 ) -> Result<Response<Body>, Response<Body>> {
+    let _permit = installation_lock.write().await;
+
     let mut cmd = Command::new(format!("{NIX_BIN_PATH}/nix-env"));
     cmd.arg("--install")
         .args(["--file", "<nixpkgs>"])
         .args(["--attr", "nix", "cacert"])
         .args(["-I", "nixpkgs=channel:nixpkgs-unstable"])
         .args(["--timeout".to_string(), nix_update_timeout.to_string()]);
-
-    let _permit = installation_lock.write().await;
 
     let cmd_res = cmd.output().await.map_err(|e| {
         eprintln!("Failed to get the output of the nix update command: {e}");
