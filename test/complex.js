@@ -433,7 +433,7 @@ t.start()`,
 
   {
     console.log(
-      'Executing C++ code with a higher max_open_files limit (should not be able to open all of them)'
+      'Executing Python code with a higher max_open_files limit (should not be able to open all of them)'
     );
     const res = await sendRequest('POST', `${BASE_URL}/execute`, {
       runtime_id: 2,
