@@ -22,7 +22,7 @@ RUN useradd -m envicutor && \
     mkdir -p /envicutor/runtimes && \
     chown envicutor:envicutor /envicutor/runtimes && \
     apt-get update && \
-    apt-get install -y sqlite3 curl xz-utils procps && \
+    apt-get install -y sqlite3 curl xz-utils procps unzip && \
     install -d -m755 -o envicutor -g envicutor /nix
 COPY --from=build /release/envicutor /envicutor/
 COPY --from=isolate /usr/local/bin/isolate /usr/local/bin

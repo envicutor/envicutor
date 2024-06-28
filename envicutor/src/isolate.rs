@@ -1,7 +1,13 @@
 use std::{process::Stdio, time::Duration};
 
 use anyhow::{anyhow, Error};
-use tokio::{fs, io::AsyncWriteExt, process::Command, task::yield_now, time};
+use tokio::{
+    fs,
+    io::{self, AsyncWriteExt},
+    process::Command,
+    task::yield_now,
+    time,
+};
 
 use crate::{
     limits::MandatoryLimits,
@@ -289,7 +295,9 @@ impl Drop for Isolate {
             }
             let res = fs::remove_file(&metadata_file_path).await;
             if let Err(e) = res {
-                eprintln!("Failed to remove: {metadata_file_path}\nError: {e}");
+                if e.kind() != io::ErrorKind::NotFound {
+                    eprintln!("Failed to remove: {metadata_file_path}\nError: {e}");
+                }
             }
         });
     }

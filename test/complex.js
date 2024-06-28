@@ -601,4 +601,112 @@ with open(file_path, "w") as file:
       `Invalid run limits: max_number_of_processes can't exceed ${RUN_MAX_NUMBER_OF_PROCESSES}`
     );
   }
+
+  {
+    console.log('Making a runtime for multi-file python projects that run through first.py');
+    const res = await sendRequest('POST', `${BASE_URL}/runtimes`, {
+      name: 'Python3 (project with first.py)',
+      nix_shell: `
+{ pkgs ? import (
+  fetchTarball {
+    url="https://github.com/NixOS/nixpkgs/archive/72da83d9515b43550436891f538ff41d68eecc7f.tar.gz";
+    sha256="177sws22nqkvv8am76qmy9knham2adfh3gv7hrjf6492z1mvy02y";
+  }
+) {} }:
+pkgs.mkShell {
+  nativeBuildInputs = with pkgs; [
+      python3
+  ];
+}`,
+      compile_script: '',
+      run_script: 'python3 first.py',
+      source_file_name: 'useless_for_these_tests'
+    });
+
+    console.log(await res.text());
+    assert.equal(res.status, 200);
+  }
+
+  {
+    console.log('Making a runtime for multi-file C++ projects that run through first.cpp');
+    const res = await sendRequest('POST', `${BASE_URL}/runtimes`, {
+      name: 'C++ (project with first.cpp)',
+      nix_shell: `
+{ pkgs ? import (
+  fetchTarball {
+    url="https://github.com/NixOS/nixpkgs/archive/72da83d9515b43550436891f538ff41d68eecc7f.tar.gz";
+    sha256="177sws22nqkvv8am76qmy9knham2adfh3gv7hrjf6492z1mvy02y";
+  }
+) {} }:
+pkgs.mkShell {
+  nativeBuildInputs = with pkgs; [
+      gcc
+  ];
+}`,
+      compile_script: 'g++ *.cpp',
+      run_script: './a.out',
+      source_file_name: 'useless_for_these_tests'
+    });
+
+    console.log(await res.text());
+    assert.equal(res.status, 200);
+  }
+
+  {
+    console.log('Executing a multi-file Python project');
+    const res = await sendRequest('POST', `${BASE_URL}/execute?is_project=true`, {
+      runtime_id: 5,
+      source_code: `UEsDBBQAAAAIAOKU3Fi5qacyJAAAACoAAAAIABwAZmlyc3QucHlVVAkAAxfZfmaW2H5mdXgLAAEE6AMAAAToAwAASyvKz1UoTk3Oz0tRyMwtyC8qUShOrIzPSM3JyefigjM1NLkAUEsDBAoAAAAAACGV3Fiz8tsBJAAAACQAAAAJABwAc2Vjb25kLnB5VVQJAAOO2X5mwNh+ZnV4CwABBOgDAAAE6AMAAGRlZiBzYXlfaGVsbG8oKToKICAgIHByaW50KGlucHV0KCkpClBLAQIeAxQAAAAIAOKU3Fi5qacyJAAAACoAAAAIABgAAAAAAAEAAACkgQAAAABmaXJzdC5weVVUBQADF9l+ZnV4CwABBOgDAAAE6AMAAFBLAQIeAwoAAAAAACGV3Fiz8tsBJAAAACQAAAAJABgAAAAAAAEAAACkgWYAAABzZWNvbmQucHlVVAUAA47ZfmZ1eAsAAQToAwAABOgDAABQSwUGAAAAAAIAAgCdAAAAzQAAAAAA`,
+      input: 'Hello world'
+    });
+
+    const text = await res.text();
+    console.log(text);
+    assert.equal(res.status, 200);
+    const body = JSON.parse(text);
+    assert.equal(body.run.stdout, 'Hello world\n');
+  }
+
+  {
+    console.log('Executing a multi-file C++ project');
+    const res = await sendRequest('POST', `${BASE_URL}/execute?is_project=true`, {
+      runtime_id: 6,
+      source_code: `UEsDBBQAAAAIAEKW3FhrXN1mUwAAAGgAAAAJABwAZmlyc3QuY3BwVVQJAAOr235mNdt+ZnV4CwABBOgDAAAE6AMAAFPOzEvOKU1JVbDJzC8uKUpNzLXjUoaLAUUy89LtuLjK8jNTFIoTK+MzUnNy8jU0rbm4MvNKFHITM/M0NLmquRSAAEUaJFCUWlJalKdgYM1VywUAUEsDBBQAAAAIADuW3Fgq9MNtZgAAAIoAAAAKABwAc2Vjb25kLmNwcFVUCQADodt+ZjjbfmZ1eAsAAQToAwAABOgDAABNi0sKgDAMRPc5RcCFCp5AiycRRNqggZqCqYKId/cH6iwezBsmYbF+doRG48TS15C8hsPpqBtrgCWwQ+3WdiDvQ5bjBnhGoyvL54hafaqn6Fkou4tlKVDz32zDHNEY1AtpI2kFOxxQSwECHgMUAAAACABCltxYa1zdZlMAAABoAAAACQAYAAAAAAABAAAApIEAAAAAZmlyc3QuY3BwVVQFAAOr235mdXgLAAEE6AMAAAToAwAAUEsBAh4DFAAAAAgAO5bcWCr0w21mAAAAigAAAAoAGAAAAAAAAQAAAKSBlgAAAHNlY29uZC5jcHBVVAUAA6HbfmZ1eAsAAQToAwAABOgDAABQSwUGAAAAAAIAAgCfAAAAQAEAAAAA`,
+      input: 'Hello world'
+    });
+
+    const text = await res.text();
+    console.log(text);
+    assert.equal(res.status, 200);
+    const body = JSON.parse(text);
+    assert.equal(body.run.stdout, 'Hello world\n');
+  }
+
+  {
+    console.log('Executing a multi-file C++ project with invalid Base64');
+    const res = await sendRequest('POST', `${BASE_URL}/execute?is_project=true`, {
+      runtime_id: 6,
+      source_code: '@x@',
+      input: 'Hello world'
+    });
+
+    const text = await res.text();
+    console.log(text);
+    assert.equal(res.status, 400);
+  }
+
+  {
+    console.log('Executing a multi-file C++ project with invalid zip');
+    const res = await sendRequest('POST', `${BASE_URL}/execute?is_project=true`, {
+      runtime_id: 6,
+      source_code: `LSBUZXN0IGludmFsaWQgYmFzZTY0Ci0gVGVzdCBpbnZhbGlkIHppcAotIFByb3BlciBsb2dnaW5nCi0gTW9yZSBsaW1pdCB0ZXN0cwo=`,
+      input: 'Hello world'
+    });
+
+    const text = await res.text();
+    console.log(text);
+    assert.equal(res.status, 200);
+    const body = JSON.parse(text);
+    assert.equal(body.extract.exit_code, 9);
+  }
 })();

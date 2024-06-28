@@ -208,7 +208,7 @@ int main() {
     const installation_finish = await installation_promise;
     const duration = new Date() - before;
 
-    console.log(`Time to finish installation: ${duration}`);
+    console.log(`Time to finish installation: ${duration} ms`);
     assert.ok(
       installation_finish > last_execution_finish,
       'Installation finished before last execution'
@@ -270,7 +270,7 @@ int main() {
     const before = new Date();
     const second_finish = await second_promise;
     const duration = new Date() - before;
-    console.log(`Time to finish second installation: ${duration}`);
+    console.log(`Time to finish second installation: ${duration} ms`);
     assert.ok(
       second_finish >= first_finish,
       'Second installation finished before first installation'

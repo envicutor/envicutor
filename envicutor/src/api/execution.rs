@@ -134,8 +134,6 @@ pub async fn execute(
         INTERNAL_SERVER_ERROR_RESPONSE.into_response()
     })?;
 
-    req.source_code.add_new_line_if_none();
-
     if is_project {
         let (req_ret, decoded_res) = task::spawn_blocking(move || {
             let decoded = BASE64_STANDARD.decode(&req.source_code);
@@ -151,7 +149,7 @@ pub async fn execute(
             (
                 StatusCode::BAD_REQUEST,
                 Json(Message {
-                    message: e.to_string(),
+                    message: format!("Invalid base64: {e}"),
                 }),
             )
                 .into_response()
@@ -163,6 +161,7 @@ pub async fn execute(
         )
         .await
     } else {
+        req.source_code.add_new_line_if_none();
         fs::write(
             format!("{}/{}", initial_submission_dir, runtime.source_file_name),
             &req.source_code,
@@ -185,7 +184,7 @@ pub async fn execute(
                 None,
                 "/box/submission",
                 None,
-                &["unzip", "-qq", SOURCE_ZIP_NAME],
+                &["/bin/unzip", "-qq", SOURCE_ZIP_NAME],
             )
             .await
             .map_err(|e| {
