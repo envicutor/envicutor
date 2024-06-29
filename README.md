@@ -19,14 +19,14 @@ To run API tests:
 make test
 ```
 
+To run stress tests (must be run after API tests):
+
+```bash
+make stress
+```
+
 To stop Envicutor:
 
 ```bash
 make stop
-```
-
-To remove test containers:
-
-```bash
-make stop-test
 ```
