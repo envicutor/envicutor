@@ -9,4 +9,4 @@ mkdir init && \
 echo 1 > init/cgroup.procs && \
 echo '+cpuset +memory' > cgroup.subtree_control && \
 echo "Initialized cgroup" && \
-exec su -- envicutor -c 'exec /envicutor/setup-nix-and-db.sh'
+exec su -- envicutor -c 'ulimit -n 65536 && exec /envicutor/setup-nix-and-db.sh'
