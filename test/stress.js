@@ -25,4 +25,31 @@ const { sendRequest, BASE_URL } = require('./common');
       assert.equal(body.run.stderr, '');
     }
   }
+
+  {
+    console.log('Executing 300 C++ submissions in parallel');
+    const promises = [];
+    for (let i = 0; i < 300; ++i) {
+      promises.push(
+        sendRequest('POST', `${BASE_URL}/execute`, {
+          runtime_id: 3,
+          source_code: `#include <fstream>
+int main() {
+  printf("Hello world\\n");
+  return 0;
+}`
+        })
+      );
+    }
+    const before = new Date();
+    const responses = await Promise.all(promises);
+    console.log(`Time taken: ${new Date() - before} ms`);
+    for (const res of responses) {
+      const text = await res.text();
+      assert.equal(res.status, 200);
+      const body = JSON.parse(text);
+      assert.equal(body.run.stdout, 'Hello world\n');
+      assert.equal(body.run.stderr, '');
+    }
+  }
 })();
