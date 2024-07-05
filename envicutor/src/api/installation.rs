@@ -49,6 +49,8 @@ async fn validate_request(req: &AddRuntimeRequest) -> Result<(), Response<Body>>
         "Run command can't be empty"
     } else if req.source_file_name.is_empty() {
         "Source file name can't be empty"
+    } else if sanitize_filename::sanitize(&req.source_file_name) != req.source_file_name {
+        "Invalid source file name"
     } else {
         ""
     };

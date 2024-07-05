@@ -31,6 +31,90 @@ print(os.environ["spaces"] == "these spaces")
   }
 
   {
+    console.log('Installing Python with invalid source_file_name (tries to escape to parent)');
+    const res = await sendRequest('POST', `${BASE_URL}/runtimes`, {
+      name: 'PythonBad',
+      nix_shell: `
+{ pkgs ? import (
+  fetchTarball {
+    url="https://github.com/NixOS/nixpkgs/archive/72da83d9515b43550436891f538ff41d68eecc7f.tar.gz";
+    sha256="177sws22nqkvv8am76qmy9knham2adfh3gv7hrjf6492z1mvy02y";
+  }
+) {} }:
+pkgs.mkShell {
+  nativeBuildInputs = with pkgs; [
+      python3
+  ];
+}`,
+      compile_script: '',
+      run_script: 'python3 main.py',
+      source_file_name: '../main.py'
+    });
+
+    const text = await res.text();
+    console.log(text);
+    assert.equal(res.status, 400);
+    const body = JSON.parse(text);
+    assert.equal(body.message, 'Invalid source file name');
+  }
+
+  {
+    console.log('Installing Python with invalid source_file_name (tries to be current directory)');
+    const res = await sendRequest('POST', `${BASE_URL}/runtimes`, {
+      name: 'PythonBad2',
+      nix_shell: `
+{ pkgs ? import (
+  fetchTarball {
+    url="https://github.com/NixOS/nixpkgs/archive/72da83d9515b43550436891f538ff41d68eecc7f.tar.gz";
+    sha256="177sws22nqkvv8am76qmy9knham2adfh3gv7hrjf6492z1mvy02y";
+  }
+) {} }:
+pkgs.mkShell {
+  nativeBuildInputs = with pkgs; [
+      python3
+  ];
+}`,
+      compile_script: '',
+      run_script: 'python3 main.py',
+      source_file_name: '.'
+    });
+
+    const text = await res.text();
+    console.log(text);
+    assert.equal(res.status, 400);
+    const body = JSON.parse(text);
+    assert.equal(body.message, 'Invalid source file name');
+  }
+
+  {
+    console.log('Installing Python with invalid source_file_name (tries to be a directory)');
+    const res = await sendRequest('POST', `${BASE_URL}/runtimes`, {
+      name: 'PythonBad3',
+      nix_shell: `
+{ pkgs ? import (
+  fetchTarball {
+    url="https://github.com/NixOS/nixpkgs/archive/72da83d9515b43550436891f538ff41d68eecc7f.tar.gz";
+    sha256="177sws22nqkvv8am76qmy9knham2adfh3gv7hrjf6492z1mvy02y";
+  }
+) {} }:
+pkgs.mkShell {
+  nativeBuildInputs = with pkgs; [
+      python3
+  ];
+}`,
+      compile_script: '',
+      run_script: 'python3 main.py',
+      source_file_name: 'main.py/'
+    });
+
+    const text = await res.text();
+    console.log(text);
+    assert.equal(res.status, 400);
+    const body = JSON.parse(text);
+    assert.equal(body.message, 'Invalid source file name');
+  }
+
+  {
     console.log('Executing C++ code with a compile error (run result should be null)');
     const res = await sendRequest('POST', `${BASE_URL}/execute`, {
       runtime_id: 3,
