@@ -9,7 +9,7 @@ use crate::{
         common_functions::get_next_box_id,
         common_responses::{Message, StaticMessage, INTERNAL_SERVER_ERROR_RESPONSE},
     },
-    globals::{DB_PATH, RUNTIMES_DIR},
+    globals::{DB_PATH, RUNTIMES_DIR, TEMP_DIR},
     strings::NewLine,
     temp_dir::TempDir,
     transaction::Transaction,
@@ -84,7 +84,7 @@ pub async fn install_runtime(
 
     let current_box_id = get_next_box_id(&box_id);
 
-    let workdir = TempDir::new(format!("/tmp/{current_box_id}-submission"))
+    let workdir = TempDir::new(format!("{TEMP_DIR}/{current_box_id}-submission"))
         .await
         .map_err(|e| {
             eprintln!("Failed to create workdir: {e}");

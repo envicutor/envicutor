@@ -10,6 +10,7 @@ use tokio::{
 };
 
 use crate::{
+    globals::TEMP_DIR,
     limits::MandatoryLimits,
     types::{Kilobytes, Seconds},
 };
@@ -106,7 +107,7 @@ impl Isolate {
         }
         Ok(Isolate {
             box_id,
-            metadata_file_path: format!("/tmp/{box_id}-metadata.txt"),
+            metadata_file_path: format!("{TEMP_DIR}/{box_id}-metadata.txt"),
             run_pid: None,
             box_dir: format!("{}/box", String::from_utf8_lossy(&res.stdout).trim()),
         })

@@ -1,3 +1,1 @@
-- Proper logging
-- More limit tests
-- Clean up isolate on --init fail
+- Check residual files after tests

@@ -20,7 +20,9 @@ RUN apt-get update && \
 FROM debian:bookworm-20240612
 RUN useradd -m envicutor && \
     mkdir -p /envicutor/runtimes && \
+    mkdir /envicutor/tmp && \
     chown envicutor:envicutor /envicutor/runtimes && \
+    chown envicutor:envicutor /envicutor/tmp && \
     apt-get update && \
     apt-get install -y sqlite3 curl xz-utils procps unzip && \
     install -d -m755 -o envicutor -g envicutor /nix

@@ -32,4 +32,5 @@ test:
 	docker compose --profile test run --rm test "simple.js"
 	docker compose --profile test run --rm test "complex.js"
 	docker compose --profile test run --rm test "concurrency.js"
+	/bin/bash ./test/check-residual.sh
 	make logs
