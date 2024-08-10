@@ -31,6 +31,7 @@ const { sendRequest, BASE_URL } = require('./common');
     const body = JSON.parse(text);
     assert.equal(body.run.stdout, 'Hello world\n');
     assert.equal(body.run.stderr, '');
+    assert.ok(body.run.memory !== null && body.run.memory !== undefined);
   }
 
   {
@@ -54,5 +55,11 @@ int main() {
     const body = JSON.parse(text);
     assert.equal(body.run.stdout, 'Hello\n');
     assert.equal(body.run.stderr, '');
+    assert.ok(
+      body.compile.memory !== null &&
+        body.compile.memory !== undefined &&
+        body.run.memory !== null &&
+        body.run.memory !== undefined
+    );
   }
 })();
