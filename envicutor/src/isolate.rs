@@ -264,7 +264,7 @@ impl Drop for Isolate {
         tokio::spawn(async move {
             if let Some(run_pid) = run_pid_opt {
                 let kill_res = Command::new("/bin/kill")
-                    .arg("-9")
+                    .arg("-SIGABRT")
                     .arg(run_pid.to_string())
                     .output()
                     .await;

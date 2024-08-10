@@ -8,7 +8,8 @@ const {
   RUN_EXTRA_TIME,
   RUN_MAX_OPEN_FILES,
   RUN_MAX_FILE_SIZE,
-  RUN_MAX_NUMBER_OF_PROCESSES
+  RUN_MAX_NUMBER_OF_PROCESSES,
+  MAX_CONCURRENT_SUBMISSIONS
 } = require('./common');
 
 (async () => {
@@ -400,19 +401,28 @@ t.start()`,
     }, 20);
 
     try {
-      await sendRequest(
-        'POST',
-        `${BASE_URL}/execute`,
-        {
-          runtime_id: 2,
-          source_code: `
-  import time
+      const promises = [];
+      for (let i = 0; i < MAX_CONCURRENT_SUBMISSIONS; ++i) {}
+      promises.push(
+        sendRequest(
+          'POST',
+          `${BASE_URL}/execute`,
+          {
+            runtime_id: 2,
+            source_code: `
+import signal
 
-  time.sleep(5)
-  `
-        },
-        controller.signal
+
+signal.signal(signal.SIGABRT, signal.SIG_IGN)
+signal.signal(signal.SIGINT, signal.SIG_IGN)
+signal.signal(signal.SIGTERM, signal.SIG_IGN)
+signal.pause()
+`
+          },
+          controller.signal
+        )
       );
+      await Promise.all(promises);
     } catch (e) {}
   }
 
