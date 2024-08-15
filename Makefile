@@ -16,10 +16,13 @@ stop:
 migrate:
 	docker volume rm -f envicutor_runtimes
 
-stress:
+stress-ci:
 	make stop
 	make start-no-logs
 	docker compose --profile test run --rm --build test "stress.js"
+
+stress:
+	make stress-ci
 	make logs
 
 test-ci:
