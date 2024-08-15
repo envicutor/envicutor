@@ -25,9 +25,6 @@ jobs:
         sudo chmod +x /usr/local/bin/docker-compose
         docker-compose version
 
-    - name: Build Docker images
-      run: docker-compose build
-
     - name: Run API tests
       run: make test
 
