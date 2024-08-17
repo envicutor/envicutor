@@ -16,13 +16,16 @@ stop:
 migrate:
 	docker volume rm -f envicutor_runtimes
 
-stress:
+stress-ci:
 	make stop
 	make start-no-logs
 	docker compose --profile test run --rm --build test "stress.js"
+
+stress:
+	make stress-ci
 	make logs
 
-test:
+test-ci:
 	make stop
 	make migrate
 	make start-no-logs
@@ -33,4 +36,7 @@ test:
 	docker compose --profile test run --rm test "complex.js"
 	docker compose --profile test run --rm test "concurrency.js"
 	/bin/bash ./test/check-residual.sh
+
+test:
+	make test-ci
 	make logs
