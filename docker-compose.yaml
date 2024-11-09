@@ -11,10 +11,8 @@ volumes:
 services:
   envicutor:
     build: ./envicutor
-    volumes:
-      - runtimes:/envicutor/runtimes
-      - nix:/nix
-      - home:/home/envicutor
+    ports:
+      - 5000:5000
     privileged: true
     environment: &env
       - PORT=5000
@@ -32,7 +30,7 @@ services:
       - RUN_MAX_OPEN_FILES=64
       - RUN_MAX_FILE_SIZE=100000
       - RUN_MAX_NUMBER_OF_PROCESSES=64
-      - MAX_CONCURRENT_SUBMISSIONS=8
+      - MAX_CONCURRENT_SUBMISSIONS=64
       - INSTALLATION_TIMEOUT=120
       - UPDATE_TIMEOUT=240
     healthcheck:
