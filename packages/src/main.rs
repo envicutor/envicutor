@@ -63,9 +63,8 @@ fn main() {
                         }
                         entry.push(runtime.version);
                     } else {
-                        let mut vec = Vec::new();
-                        vec.push(runtime.version);
-                        names_to_versions.insert(runtime.name.clone(), vec);
+                        names_to_versions
+                            .insert(runtime.name.clone(), vec![runtime.version.clone()]);
                     }
                     ids.insert(runtime.id);
 
@@ -139,7 +138,7 @@ pub fn write_file_and_set_permissions(path: &str, content: &String, perms: Permi
 
 struct Transaction<T>
 where
-    T: Fn() -> (),
+    T: Fn(),
 {
     committed: bool,
     rollback_fn: T,
@@ -147,13 +146,13 @@ where
 
 impl<T> Transaction<T>
 where
-    T: Fn() -> (),
+    T: Fn(),
 {
     fn init(rollback_fn: T) -> Transaction<T> {
-        return Self {
+        Self {
             committed: false,
             rollback_fn,
-        };
+        }
     }
     fn commit(&mut self) {
         self.committed = true;
@@ -162,7 +161,7 @@ where
 
 impl<T> Drop for Transaction<T>
 where
-    T: Fn() -> (),
+    T: Fn(),
 {
     fn drop(&mut self) {
         (self.rollback_fn)();
@@ -176,7 +175,7 @@ pub fn create_dir_replacing_existing(path: &String) {
         fs::remove_dir_all(path)
             .unwrap_or_else(|e| panic!("Failed to remove directory at: {:?}\nError: {e}", path));
     }
-    fs::create_dir(&path).unwrap_or_else(|e| {
+    fs::create_dir(path).unwrap_or_else(|e| {
         panic!("Failed to create: {:?}\nError: {e}", path);
     });
 }
