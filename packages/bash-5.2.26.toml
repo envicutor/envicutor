@@ -2,11 +2,12 @@ id = "1"
 name = "Bash"
 version = "5.2.26"
 nix_shell = """
-  { pkgs ? import (fetchTarball "https://github.com/NixOS/nixpkgs/archive/83fb6c028368.tar.gz") {}}:
-  pkgs.mkShell {
-      nativeBuildInputs = with pkgs; [
-          bash
-      ];
-  }"""
+{ pkgs ? import (fetchTarball "https://github.com/NixOS/nixpkgs/archive/83fb6c028368.tar.gz") {}}:
+pkgs.mkShell {
+    nativeBuildInputs = with pkgs; [
+        bash
+    ];
+}"""
 run_script = "bash main.sh"
 source_file_name = "main.sh"
+test = "cat && echo $1"

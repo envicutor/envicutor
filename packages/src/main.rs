@@ -1,7 +1,9 @@
 use std::{
     collections::{HashMap, HashSet},
-    fs,
+    fs::{self, set_permissions, Permissions},
+    os::unix::fs::PermissionsExt,
     path::Path,
+    process::Command,
 };
 
 use serde::Deserialize;
@@ -21,6 +23,7 @@ struct Runtime {
 
 const PACKAGES_DIR: &str = "/app/packages";
 const RUNTIMES_DIR: &str = "/envicutor/runtimes";
+const NIX_BIN_PATH: &str = "/root/.nix-profile/bin";
 
 fn main() {
     let mut ids: HashSet<u16> = HashSet::new();
@@ -37,15 +40,20 @@ fn main() {
             if let Some(ext) = file_path.extension() {
                 if ext == "toml" {
                     eprintln!("Processing: {:?}", file_path);
+
+                    // Parse
                     let content = fs::read_to_string(file_path).unwrap_or_else(|e| {
                         panic!("Failed to read file content: {e}");
                     });
                     let runtime: Runtime = toml::from_str(&content).unwrap_or_else(|e| {
                         panic!("Failed to parse runtime: {e}");
                     });
+
+                    // Check if same id exists
                     if ids.contains(&runtime.id) {
                         panic!("Found duplicate id: {}", runtime.id);
                     }
+                    // Check if same name + version exists
                     if let Some(entry) = names_to_versions.get_mut(&runtime.name) {
                         if entry.contains(&runtime.version) {
                             panic!(
@@ -62,16 +70,56 @@ fn main() {
                     ids.insert(runtime.id);
 
                     let workdir = format!("{}/{}", RUNTIMES_DIR, runtime.id);
+
+                    // Create runtime directory
                     create_dir_replacing_existing(&workdir);
                     let mut trx = Transaction::init(|| {
+                        // Delete the directory on failure
                         fs::remove_dir_all(workdir.clone()).unwrap_or_else(|e| {
                             panic!("Failed to remove directory: {workdir}\nError: {e}");
                         });
                     });
-                    fs::write(format!("{}/shell.nix", workdir), runtime.nix_shell).unwrap_or_else(
-                        |e| {
-                            panic!("Failed to write shell.nix: {e}");
-                        },
+
+                    // Write shell.nix
+                    let nix_shell_path = format!("{workdir}/shell.nix");
+                    fs::write(&nix_shell_path, &runtime.nix_shell).unwrap_or_else(|e| {
+                        panic!("Failed to write shell.nix: {e}");
+                    });
+
+                    // Install package, create env file
+                    let mut cmd = Command::new("env");
+                    cmd.arg("-i")
+                        .arg("PATH=/bin")
+                        .arg(format!("{NIX_BIN_PATH}/nix-shell"))
+                        .arg(nix_shell_path)
+                        .args(["--run", &format!("{NIX_BIN_PATH}/bash -c env")]);
+                    let cmd_res = cmd.output().unwrap_or_else(|e| {
+                        panic!("Failed to run nix-shell: {e}");
+                    });
+                    let stdout = String::from_utf8_lossy(&cmd_res.stdout).to_string();
+                    let stderr = String::from_utf8_lossy(&cmd_res.stderr).to_string();
+                    let success = cmd_res.status.success();
+                    if !success {
+                        panic!("Running nix-shell was not successful\nstdout: {stdout}\nstderr: {stderr}");
+                    }
+                    fs::write(format!("{workdir}/env"), stdout).unwrap_or_else(|e| {
+                        panic!("Failed to write the env file: {e}");
+                    });
+
+                    // Write compile_script and run_script
+                    if let Some(compile_script) = &runtime.compile_script {
+                        if !compile_script.is_empty() {
+                            write_file_and_set_permissions(
+                                &format!("{workdir}/compile"),
+                                compile_script,
+                                Permissions::from_mode(0o755),
+                            );
+                        }
+                    }
+                    write_file_and_set_permissions(
+                        &format!("{workdir}/run"),
+                        &runtime.run_script,
+                        Permissions::from_mode(0o755),
                     );
 
                     trx.commit();
@@ -79,6 +127,12 @@ fn main() {
             }
         }
     }
+}
+
+pub fn write_file_and_set_permissions(path: &str, content: &String, perms: Permissions) {
+    fs::write(path, content).unwrap_or_else(|e| panic!("Failed to write to {path}\nError: {e}"));
+    fs::set_permissions(path, perms)
+        .unwrap_or_else(|e| panic!("Failed to write permissions on {path}\nError: {e}"));
 }
 
 struct Transaction<T>

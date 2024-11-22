@@ -2,12 +2,22 @@ id = 2
 name = "C++ (via GCC)"
 version = "13.2.0"
 nix_shell = """
-  { pkgs ? import (fetchTarball "https://github.com/NixOS/nixpkgs/archive/83fb6c028368.tar.gz") {}}:
-  pkgs.mkShell {
-      nativeBuildInputs = with pkgs; [
-          gcc
-      ];
-  }"""
+{ pkgs ? import (fetchTarball "https://github.com/NixOS/nixpkgs/archive/83fb6c028368.tar.gz") {}}:
+pkgs.mkShell {
+    nativeBuildInputs = with pkgs; [
+        gcc
+    ];
+}"""
 compile_script = "exec g++ main.cpp"
 run_script = "exec ./a.out"
 source_file_name = "main.cpp"
+test = """
+#include <iostream>
+#include <string>
+
+int main(int argc, char** argv) {
+  std::string input;
+  std::cin >> input;
+  std::cout << input << '\\n' << argv[1] << '\\n';
+}
+"""
