@@ -1,6 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
-    fs::{self, set_permissions, Permissions},
+    fs::{self, Permissions},
     os::unix::fs::PermissionsExt,
     path::Path,
     process::Command,
@@ -121,6 +121,8 @@ fn main() {
                         &runtime.run_script,
                         Permissions::from_mode(0o755),
                     );
+
+                    // TODO: write metadata
 
                     trx.commit();
                 }
